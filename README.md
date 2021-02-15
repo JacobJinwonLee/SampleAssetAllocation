@@ -1,6 +1,6 @@
 # AssetAllocation
 
-### These are the asset allocation strategy backtest code, and each html file in a folder has the result of performance analysis.
+### These are backtesting codes for asset allocation strategies. Each html file in a folder has reports for each strategy.
 
 ### List of Asset Allocation Strategy
 
