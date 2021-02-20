@@ -4,6 +4,7 @@
 
 ### List of Asset Allocation Strategy
 
+#### - R (backtest using R)
 #### - 60/40
 #### - Harry Browne's Permanent Portfolio
 #### - Tyler's Golden Butterfly
