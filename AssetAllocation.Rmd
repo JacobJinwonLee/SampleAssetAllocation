@@ -1,0 +1,2434 @@
+---
+title: "AssetAllocation"
+author: "Jinwon Lee"
+date: '2021 2 21 '
+output:
+  html_document:
+    toc: yes
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. 들어가며
+
+역사적으로 버블 붕괴, 부도, 경제 위기 같은 사건들은 언젠가 반드시 일어났고, 그때마다 가장 흔한 투자 대상으로 여겨지는 주식 시장은 폭락을 맞이했습니다. -50%를 만회하려면 100% 수익을 내야만 하는데, 이것은 어려운 일입니다. 게다가, -50%를 당하고서도 시장에 남아있을 수 있는 사람은 거의 없습니다. 그러나, 처음부터 적게 잃는 방향으로 간다면 부담이 줄어듭니다. -20%를 만회하려면 25% 수익을 내야 합니다. 손실을 2.5배 줄이면 만회하는 데 필요한 수익률은 1/4이면 됩니다. 또한, 당한 손실이 적어지므로 시장을 완전히 떠나 회복 기회를 잃는 것을 방지합니다. 이런 구조를 만들기 위해서는 주식 시장이 폭락할 때 막아줄 자산이 필요한데, 주식 시장과 상관관계가 낮거나 음의 상관관계를 가지는 자산에 분산 투자를 하면 됩니다. 이런 방식이 자산배분 투자입니다. 자산배분은 자산군 배분 외에도 국가 배분도 가능합니다. 저는 투자 전략은 하락장에서 시장보다 방어를 잘하고 위험 대비 수익이 높다면 성공적인 전략이라고 생각합니다. 각 자산군들의 과거 수익률 데이터에서 언제 폭락이 발생했는지 보겠습니다. 백테스트에 필요한 라이브러리들을 불러옵니다.
+
+```{r message = FALSE, warning = FALSE}
+library(dplyr)
+library(reshape2)
+library(quantmod)
+library(PerformanceAnalytics)
+library(readxl)
+library(xts)
+library(magrittr)
+library(lubridate)
+library(tidyr)
+library(ggplot2)
+library(quadprog)
+library(corrplot)
+library(cccp)
+library(fPortfolio)
+library(nloptr)
+library(PortfolioAnalytics)
+```
+
+# 2. 자산군별 과거 결과
+
+데이터는 S&P 500과 T-Bill 등의 자산군은 1900년부터의 월간 수익률 데이터를 가지고 있고, 그 외의 자산군도 상당히 긴 기간의 데이터를 대상으로 합니다. 
+
+```{r message = FALSE, warning = FALSE, echo=FALSE}
+
+ReturnData = read_excel("AssetClassReturnData.xlsx")
+
+ReturnData$`Data Index` = as.Date(ReturnData$`Data Index`)
+ReturnData$`Broker Call Rate` = as.numeric(ReturnData$`Broker Call Rate`)
+ReturnData$CPI = as.numeric(ReturnData$CPI)
+ReturnData$`T-Bills` = as.numeric(ReturnData$`T-Bills`)
+ReturnData$`S&P 500 Total return` = as.numeric(ReturnData$`S&P 500 Total return`)
+ReturnData$`Small Cap Stocks` = as.numeric(ReturnData$`Small Cap Stocks`)
+ReturnData$`MSCI EAFE` = as.numeric(ReturnData$`MSCI EAFE`)
+ReturnData$EEM = as.numeric(ReturnData$EEM)
+ReturnData$`US 10 YR` = as.numeric(ReturnData$`US 10 YR`)
+ReturnData$`US Corp Bond Return Index` = as.numeric(ReturnData$`US Corp Bond Return Index`)
+ReturnData$GSCI = as.numeric(ReturnData$GSCI)
+ReturnData$NAREIT = as.numeric(ReturnData$NAREIT)
+ReturnData$`US 30 YR` = as.numeric(ReturnData$`US 30 YR`)
+ReturnData$GOLD = as.numeric(ReturnData$GOLD)
+ReturnData$`Foreign 10 YR` = as.numeric(ReturnData$`Foreign 10 YR`)
+ReturnData$`Non-Durables` = as.numeric(ReturnData$`Non-Durables`)
+ReturnData$Durables = as.numeric(ReturnData$Durables)
+ReturnData$Manufacturing = as.numeric(ReturnData$Manufacturing)
+ReturnData$Energy = as.numeric(ReturnData$Energy)
+ReturnData$Tech = as.numeric(ReturnData$Tech)
+ReturnData$Telecom = as.numeric(ReturnData$Telecom)
+ReturnData$Shops = as.numeric(ReturnData$Shops)
+ReturnData$Health = as.numeric(ReturnData$Health)
+ReturnData$Utilities = as.numeric(ReturnData$Utilities)
+ReturnData$OtherSectors = as.numeric(ReturnData$OtherSectors)
+ReturnData$REITS = as.numeric(ReturnData$REITS)
+ReturnData$`Small Cap Momentum` = as.numeric(ReturnData$`Small Cap Momentum`)
+ReturnData$`Large Cap Momentum` = as.numeric(ReturnData$`Large Cap Momentum`)
+ReturnData$`Bottom 10% Momentum`= as.numeric(ReturnData$`Bottom 10% Momentum`)
+ReturnData$`Top 10% Momentum` = as.numeric(ReturnData$`Top 10% Momentum`)
+ReturnData$`Bottom 20% Value (B/P)` = as.numeric(ReturnData$`Bottom 20% Value (B/P)`)
+ReturnData$`Top 20% Value (B/P)` = as.numeric(ReturnData$`Top 20% Value (B/P)`)
+ReturnData$`Small Value` = as.numeric(ReturnData$`Small Value`)
+ReturnData$`Big Value` = as.numeric(ReturnData$`Big Value`)
+ReturnData$`Small Size` = as.numeric(ReturnData$`Small Size`)
+ReturnData$`Barclay US Managed Futures Industry BTOP 50` = as.numeric(ReturnData$`Barclay US Managed Futures Industry BTOP 50`)
+ReturnData$AQR = as.numeric(ReturnData$AQR)
+ReturnData$`TIPS Series` = as.numeric(ReturnData$`TIPS Series`)
+ReturnData$`Muni Index` = as.numeric(ReturnData$`Muni Index`)
+ReturnData$Timber = as.numeric(ReturnData$Timber)
+ReturnData$`International Small Cap Value (Global B/M Small Low)` = as.numeric(ReturnData$`International Small Cap Value (Global B/M Small Low)`)
+ReturnData$`International Large Cap Value (Global B/M Big Low)` = as.numeric(ReturnData$`International Large Cap Value (Global B/M Big Low)`)
+ReturnData$`International Small High Mom (Global mom Small High)` = as.numeric(ReturnData$`International Small High Mom (Global mom Small High)`)
+ReturnData$`International Large High Mom (Global mom Small High)` = as.numeric(ReturnData$`International Large High Mom (Global mom Small High)`)
+ReturnData$`Merrill High Yield` = as.numeric(ReturnData$`Merrill High Yield`)
+ReturnData$`World Stocks` = as.numeric(ReturnData$`World Stocks`)
+ReturnData$`World ex USA` = as.numeric(ReturnData$`World ex USA`)
+ReturnData$BuyWrite = as.numeric(ReturnData$BuyWrite)
+ReturnData$PutWrite = as.numeric(ReturnData$PutWrite)
+ReturnData$Bitcoin = as.numeric(ReturnData$Bitcoin)
+
+ReturnTimeSeries = xts(ReturnData[, 2:50], order.by = ReturnData$`Data Index`)
+```
+
+수익률 계산과 각종 성과 지표 계산에는 PerformanceAnalytics 라이브러리를 사용합니다. 먼저 1900년 1월부터의 누적 수익률과 연간 복리(기하) 수익률을 계산합니다. 아래에서 사용하는 ReturnTimeSeries는 ReturnData를 xts 패키지를 사용해 시계열 데이터로 변환한 것입니다. PerformanceAnalytics 라이브러리의 Return.cumulative 패키지는 연율화 계산을 위해 (1+r1)x(1+r2)x...x(1+rn)-1 형태의 값을 제공하고 있고, chart.CumReturns 함수도 같은 방식이므로 감안하여 살펴보겠습니다. 
+
+## 2.1. 주식
+
+### 2.1.1. S&P 500 (미국 대형주)
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$`S&P 500 Total return`)
+Return.annualized(ReturnTimeSeries$`S&P 500 Total return`)
+chart.CumReturns(ReturnTimeSeries$`S&P 500 Total return`)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프
+R.yr = apply.yearly(ReturnTimeSeries$`S&P 500 Total return`, Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('77822배'),
+    'v2' = c('9.75%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 1: S&P 500 지수 수익률: 1900.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+S&P 500은 121년 동안 누적 수익률 기준 원금의 77822배가 되었고, 연복리 수익률은 9.75%가 나옵니다. 121년 동안의 결과로만 보면 미국에 돈을 맡기고 아무것도 안 하는 것은 매우 현명한 선택이었습니다. 이번에는 S&P 500 외에 선진국 주식, 신흥국 주식, 전세계 주식의 과거 수익률을 보겠습니다. 
+
+### 2.1.2. MSCI EAFE (미국 외 선진국)
+
+먼저 선진국 주식입니다. 선진국 주식은 1970년 1월부터의 데이터입니다. 70년대 오일 쇼크에서 비롯된 강력한 인플레이션 시기를 포함하고, 1980년부터의 대세 금리 인하기를 같이 포함하므로 테스트에 사용하기에는 충분한 기간입니다. 
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$`MSCI EAFE`)
+Return.annualized(ReturnTimeSeries$`MSCI EAFE`)
+chart.CumReturns(ReturnTimeSeries$`MSCI EAFE`)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 선진국 주식은 1970년부터라 앞부분 데이터 없어서 NA 들어가는 것 na.omit으로 보정함
+R.yr = apply.yearly(na.omit(ReturnTimeSeries$`MSCI EAFE`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('93.61배'),
+    'v2' = c('9.31%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 2: MSCI EAFE 지수 (미국 외 선진국) 수익률: 1970.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+선진국 주식은 51년 동안 누적 수익률 기준 원금의 93.61배가 되었고, 연복리 수익률은 9.31%가 나옵니다. 미국 S&P 500보다는 약간 못하지만 그래도 훌륭합니다. 다음은 신흥국 주식입니다. 신흥국 주식은 1926년 1월부터의 데이터입니다. 
+
+### 2.1.3. EEM (신흥국)
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$EEM)
+Return.annualized(ReturnTimeSeries$EEM)
+chart.CumReturns(ReturnTimeSeries$EEM)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 신흥국 주식은 1926년부터라 앞부분이 잘려나감. na.omit으로 보정함
+R.yr = apply.yearly(na.omit(ReturnTimeSeries$EEM), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('4163배'),
+    'v2' = c('9.17%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 3: EEM (신흥국) 수익률: 1926.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+신흥국 주식은 95년 동안 누적 수익률 기준 원금의 4163배가 되었고, 연복리 수익률은 9.17%가 나옵니다. 주식 시장에 투자를 한다면 미국, 선진국, 신흥국 관계없이 데이터 기간 동안 연복리 9% 수준의 수익률이 나오고 있습니다. 그러므로, 포트폴리오 구성에서 주식을 제외하고는 안정적으로 괜찮은 수익률을 달성할 가능성이 매우 낮습니다. 마지막으로 전세계 주식입니다.  전세계 주식도 1926년 1월부터의 데이터입니다. 
+
+### 2.1.4. World Stocks (전세계 주식)
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$`World Stocks`)
+Return.annualized(ReturnTimeSeries$`World Stocks`)
+chart.CumReturns(ReturnTimeSeries$`World Stocks`)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 전세계 주식은 1926년부터라 앞부분 잘려나가니 na.omit으로 보정함
+R.yr = apply.yearly(na.omit(ReturnTimeSeries$`World Stocks`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('3410배'),
+    'v2' = c('8.94%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 4: 전세계 주식 수익률: 1926.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+전세계 주식은 95년 동안 누적 수익률 기준 원금의 3410배, 연복리 수익률은 8.94%가 나옵니다. 미국, 선진국, 신흥국, 전세계 모두 장기적으로 연 9% 근처로 수렴하는 것처럼 보입니다. 
+
+## 2.2. 국채
+
+이번에는 같은 국채 시리즈이지만, 조금 더 만기가 긴 10년과 30년 국채를 보겠습니다. 10년 국채는 1900년 1월부터의 데이터고, 30년 국채는 1919년 2월부터의 데이터입니다. 
+
+### 2.2.1. 10년 만기 국채
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$`US 10 YR`)
+Return.annualized(ReturnTimeSeries$`US 10 YR`)
+chart.CumReturns(ReturnTimeSeries$`US 10 YR`)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프
+R.yr = apply.yearly(ReturnTimeSeries$`US 10 YR`, Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('256.89배'),
+    'v2' = c('4.69%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 5: 10년 만기 국채 수익률: 1900.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+10년 만기 국채는 누적 수익률 기준 원금의 256.89배가 나오고, 연복리 수익률은 4.69% 입니다. 만기가 꽤 길어서 투자 대상으로 삼을 수 있는 정도의 수익률이 나오고 있습니다.
+
+### 2.2.2. 30년 만기 국채
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(ReturnTimeSeries$`US 30 YR`)
+Return.annualized(ReturnTimeSeries$`US 30 YR`)
+chart.CumReturns(ReturnTimeSeries$`US 30 YR`)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 30년 국채는 1919년부터 데이터 있어서 앞쪽은 NA로 처리되어 0 들어감. na.omit 해서 정상인 것만 남김
+R.yr = apply.yearly(na.omit(ReturnTimeSeries$`US 30 YR`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('288.43배'),
+    'v2' = c('5.72%')
+  ),
+  
+  col.names = c('누적 수익', '연복리 수익률'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 6: 30년 만기 국채 수익률: 1919.02 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+30년 만기 국채는 누적 수익률 기준 원금의 288.43배가 나오고, 연복리 수익률은 5.72%가 나옵니다. 만기가 길어지니 수익률도 증가했습니다.
+
+## 2.3. 상관관계
+
+다음으로는 상관관계를 보겠습니다. 선진국 주식의 데이터 기간이 짧으니 선진국 주식을 포함한 것과 포함하지 않은 경우로 보겠습니다. 먼저, 선진국 주식을 포함한 경우입니다. 상관관계를 보기 위해 시계열 변환 전 데이터를 사용했습니다. 
+
+```{r message = FALSE, warning = FALSE}
+
+cor(subset(ReturnData, select=c('T-Bills', 'S&P 500 Total return', 'MSCI EAFE', 'EEM', 'World Stocks', 'US 10 YR',
+                                'US 30 YR')), use='complete.obs')
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+cor(subset(ReturnData, select=c('T-Bills', 'S&P 500 Total return', 'MSCI EAFE', 'EEM', 'World Stocks', 'US 10 YR',
+                                'US 30 YR')), use='complete.obs') %>%
+  corrplot(method = 'color', type = 'upper', addCoef.col = 'black', number.cex = 0.7, tl.cex = 0.6, tl.srt = 45,
+           tl.col = 'black', col = colorRampPalette(c('blue','white','red'))(200),
+           mar = c(0, 0, 0.5, 0))
+
+```
+
+MSCI EAFE가 들어갔으므로 1970년부터의 상관관계입니다. 미국 단기 국채인 T-Bills는 현금과 비슷한 역할을 할 수 있으므로, 다른 주가지수, 국채와 상관관계가 거의 없습니다. 현금 100%는 인플레이션 조정 시 구매력의 감소를 가져오는 문제가 있지만, 자산배분 측면에서는 현금을 일정 수준 가져감으로써 포트폴리오의 다각화 수준을 높일 수 있을 것입니다. 일반적으로는 주식과 국채는 반대 방향으로 움직인다고 알려져 있습니다. 그러나, 1970년부터의 상관관계를 보면 S&P 500 지수와 미국 10년 만기 국채의 상관계수 0.06, 30년 만기 국채와의 상관계수 0.04으로 반대 방향보다는 상관관계가 거의 없다고 보여집니다. 주식과 국채는 상관관계가 낮은 자산군이므로, 두 자산군을 포트폴리오에 같이 포함시켜 다각화 수준을 높일 수 있습니다. 주가 지수끼리의 상관계수는 S&P 500과 선진국 지수는 0.65, S&P 500과 신흥국 지수는 0.53으로 나타납니다. 전세계 지수는 S&P 500 지수와 0.9, 선진국 지수와 0.91의 상관계수가 나오므로, 미국과 선진국 위주로 만들어진 지수라고 추측할 수 있습니다. 다음으로는 선진국 주식을 제외해서 1926년부터의 상관계수를 보겠습니다.
+
+```{r message = FALSE, warning = FALSE}
+
+cor(subset(ReturnData, select=c('T-Bills', 'S&P 500 Total return', 'EEM', 'World Stocks', 'US 10 YR',
+                                'US 30 YR')), use='complete.obs')
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+cor(subset(ReturnData, select=c('T-Bills', 'S&P 500 Total return', 'EEM', 'World Stocks', 'US 10 YR',
+                                'US 30 YR')), use='complete.obs') %>%
+  corrplot(method = 'color', type = 'upper', addCoef.col = 'black', number.cex = 0.7, tl.cex = 0.6, tl.srt = 45,
+           tl.col = 'black', col = colorRampPalette(c('blue','white','red'))(200),
+           mar = c(0, 0, 0.5, 0))
+
+```
+
+1970년부터의 상관계수들과 비슷한 경향성을 보입니다. 1926년부터로 기간을 늘릴 때 차이가 나는 점은 S&P 500 지수와 신흥국 지수의 상관계수가 0.38로 1970년부터의 상관계수 값에 비해 많이 낮아졌다는 것입니다. 이는 점점 신흥국 경제와 주가 지수가 미국을 비롯한 전세계의 영향을 받게 되어 상관관계가 높아진 것으로 생각해볼 수 있습니다. 1926년부터의 상관계수 데이터, 1970년부터의 상관계수 데이터로 추론해 볼 때, 주식과 국채를 기반으로 자산을 배분하고, 약간의 현금을 가지고 있는 것은 상관계수가 낮은 자산군으로 포트폴리오를 구성함으로써 구조적으로 변동성을 낮출 수 있을 것입니다. 기간별로 볼 때, S&P 500 지수는 대공황이 있던 1920년대 후반 ~ 1930년대 초반, 오일쇼크가 있던 1973 ~ 1974년,  1990년대 후반 ~ 2000년대 초반, 2007 ~ 2008년에 부진했습니다. 선진국 주식은 1973 ~ 1974년, 1990년대 후반 ~ 2000년대 초반, 2007 ~ 2008년, 2011년에 부진했습니다. 신흥국 주식은 대공황이 있던 1920년대 후반 ~ 1930년대 초반, 1930년대 후반, 1940년대 후반, 1990년대 후반, 2008년에 부진했습니다. 미국 주식이나 선진국 주식과 달리, 원자재가 수출에서 차지하는 비중이 높은 신흥국 주식은 1970년대에 그리 나쁘지 않았습니다. 따라서, 특정 기간에 전략이 부진한 결과를 내는 것을 방지하려면 국가 분산도 필요하다고 할 수 있습니다. 
+
+# 3. 자산배분 전략
+
+## 3.1. S&P500 - 미국 국채 10년/30년
+
+이제, 가장 높은 수익을 올리는 것으로 알려져 있는 미국 주식 시장에 대한 투자 성과를 개선해 보겠습니다. 주식에 대한 위험을 분산하기 위해 선택하는 대표적인 자산은 국채입니다. 역사적으로 상관관계가 매우 낮았기 때문에 타당한  분산 방식이라고 할 수 있습니다. 가장 흔히 쓰이는 비중은 주식 6 : 국채 4입니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_SP10 = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`US 10 YR`)
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_SP10_64 = Return.portfolio(R = rets_SP10, weights = c(0.6, 0.4), rebalance_on = 'years')
+SP10_64 = cbind(rets_SP10, port_SP10_64) %>% setNames(c('S&P 500', 'US 10 YR', '6:4 portfolio'))
+charts.PerformanceSummary(SP10_64, main = '6 : 4 portfolio')
+
+Return.cumulative(port_SP10_64)
+Return.annualized(port_SP10_64)
+Return.cumulative(rets_SP10)
+Return.annualized(rets_SP10)
+
+StdDev.annualized(port_SP10_64)
+StdDev.annualized(rets_SP10)
+
+SharpeRatio.annualized(port_SP10_64, Rf = ReturnTimeSeries$`T-Bills`, geometric = TRUE)
+SharpeRatio.annualized(rets_SP10, Rf = ReturnTimeSeries$`T-Bills`, geometric = TRUE)
+
+maxDrawdown(port_SP10_64)
+maxDrawdown(rets_SP10)
+
+```
+
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('S&P500 - 10년 만기 국채 6:4 전략', 'S&P 500', '10년 만기 국채'),
+    'v2' = c('14026배', '77823배', '256.9배'),
+    'v3' = c('8.21%', '9.75%', '4.69%'),
+    'v4' = c('10.83%', '17.59%', '6.20%'),
+    'v5' = c('0.436', '0.353', '0.212'),
+    'v6' = c('63.18%', '83.66%', '15.79%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 7: S&P500 - 10년 만기 국채 6:4 성과: 1900.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_SP10_64)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 국채 10년 6:4 그래프
+R.yr = apply.yearly(na.omit(SP10_64$`6:4 portfolio`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+S&P 500과 미국 10년 만기 국채를 6:4 비중으로 연간 리밸런싱하는 전략입니다. 1900년 1월부터 누적 수익률은 14026배, 연복리  수익률은 8.21%가 나옵니다. S&P 500 지수의 연복리 수익률 9.75%보다는 낮고, 미국 10년 만기 국채의 4.69%보다는 높습니다.  변동성 기준으로 6:4 전략의 연간 변동성은 10.8%, S&P 500은 17.6%, 미국 10년 만기 국채는 6.2%입니다. 수익률 기준으로 S&P  500보다 조금 낮지만, 변동성이 훨씬 낮은 강점이 있습니다. 위험 대비 수익을 측정하여, 전략의 우수성을 나타낼 수 있는 척도로 샤프 비율을 많이 사용합니다. 연간 샤프 비율이 6:4 전략은 0.436, S&P 500은 0.353, 미국 10년 만기 국채는 0.212입니다. 6:4 전략의 샤프 비율이 S&P 500보다 높으므로, 위험 대비 수익이 더 높은 우수한 전략입니다. 샤프 비율이 높다면 상대적으로 낮은 변동성으로도 비슷한 수익을 만들 수 있기 때문에 저변동성을 유지하여 안정적으로 가거나, 레버리지를 사용해서 S&P 500 수준으로 변동성을 올리고 더 높은 수익을 가져가는 두 가지 선택지를 만들 수 있습니다. 최대 낙폭은 6:4 전략은 63.2%, S&P 500은 83.7%, 미국 10년 만기 국채는 15.8%입니다. 전부 미국 대공황 시기인 1930년대 초반으로, 이 때는 현금 이외의 모든 자산이 외면받던 시기입니다. 그러므로, 항상 시장에 남아 있어야 하는 정적 자산배분 전략에서는 어쩔 수 없는 면이 있습니다. 상위 5개의 낙폭을 보면, 6:4 전략은 대공황 시기를 제외하면 30% 정도가 최대 낙폭이고, 2008년 대침체도 26.4%로 막았습니다. 반면 S&P 500은 2008년 대침체에서 고점 대비 51% 하락했습니다. 데이터상으로 볼 때, 6:4 전략은 수익은 S&P 500보다 못하지만 방어력이 압도적으로 좋은 모습입니다. 10년 만기 국채를 30년 만기 국채로 대체해 보겠습니다.
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_SP30 = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`US 30 YR`) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_SP30_64 = Return.portfolio(R = rets_SP30, weights = c(0.6, 0.4), rebalance_on = 'years')
+SP30_64 = cbind(rets_SP30, port_SP30_64) %>% setNames(c('S&P 500', 'US 30 YR', '6:4 portfolio'))
+charts.PerformanceSummary(SP30_64, main = '6 : 4 portfolio')
+
+Return.cumulative(port_SP30_64)
+Return.annualized(port_SP30_64)
+Return.cumulative(rets_SP30)
+Return.annualized(rets_SP30)
+
+StdDev.annualized(port_SP30_64)
+StdDev.annualized(rets_SP30)
+
+SharpeRatio.annualized(port_SP30_64, Rf = ReturnTimeSeries$`T-Bills`[230:1440], geometric = TRUE)
+SharpeRatio.annualized(rets_SP30, Rf = ReturnTimeSeries$`T-Bills`[230:1440], geometric = TRUE)
+
+maxDrawdown(port_SP30_64)
+maxDrawdown(rets_SP30)
+
+```
+
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('S&P500 - 30년 만기 국채 6:4 전략', 'S&P 500', '30년 만기 국채'),
+    'v2' = c('7254배', '24068배', '288.4배'),
+    'v3' = c('9.11%', '10.41%', '5.72%'),
+    'v4' = c('11.78%', '18.46%', '9.92%'),
+    'v5' = c('0.469', '0.367', '0.225'),
+    'v6' = c('62.16%', '83.66%', '25.84%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 8: S&P500 - 30년 만기 국채 6:4 성과: 1919.02 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_SP30_64)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: 국채 30년 6:4 그래프
+R.yr = apply.yearly(na.omit(SP30_64$`6:4 portfolio`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1919년 2월부터 누적 수익률 7254배, 연복리 수익률 9.11%, 연간 변동성 11.78%를 기록했습니다. 샤프 비율은 0.469입니다. 최대 낙폭은 62.2% 수준이고, 그 다음 낙폭은 35% 정도입니다. 동 기간 S&P 500은 연복리 수익률 10.4%, 연간 변동성 18.46%, 샤프 비율 0.367, 최대 낙폭 83.66%를 기록했습니다. 연 수익률 9% 수준으로 수익률도 그리 포기하지 않으면서 변동성은 대폭 줄어들어 간단하지만 쓸만한 전략입니다. 데이터의 한계로 테스트 기간이 달라졌으나, 10년 만기 국채로 6:4 전략을 구사했을 때의 샤프 비율 0.436보다 상당히 개선되었습니다.
+
+주식 시장의 리스크를 국채에 분산 투자하여 줄이는 방법을 보았습니다. 주식 시장에 문제가 있을 때, 상관관계가 낮은 자산인 국채를 같이 가지고 있으면 수익을 약간 포기하는 대신 변동성이 크게 줄어듭니다. 변동성을 극도로 보수적으로 관리하겠다면 어쩔 수 없지만, 수익을 극대화하기 위해서는 어느 정도의 변동성은 감수해야 합니다. 그러기 위해서는 두 가지 방식이 있습니다. 첫째로, 바벨 전략입니다. 주식-국채 분산 전략과 달리 변동성도 크고 수익도 주식 시장보다 큰 전략을 동시에 운용할 수 있습니다. 이 고변동성 고수익 전략은 다른 장에서 보겠습니다. 둘째로, 이 전략의 변동성을 올리는 것입니다. 주식-국채 분산 전략의 샤프 비율이 높기 때문에 주식 시장보다 낮은 변동성으로도 비슷한 수준의 수익을 낼 수 있습니다. 변동성을 올리기 위해서는 10년 만기 국채를 만기가 더 긴 30년 만기 국채로 교체하거나, 아예 레버리지를 직접 사용할 수 있습니다. 편입 자산군과 전략 틀이 확정되면 레버리지를 사용하여 목표 변동성을 설정한 뒤 백테스트를 해 보겠습니다.
+
+이제 주식-국채 자산배분 전략의 약점 중 보완할 수 있는 것을 찾아보도록 하겠습니다. 앞서 테스트한 자산배분 전략들이 공통적으로 부진한 시기는 1906 ~ 1908년, 1929 ~ 1936년, 1937 ~ 1943년, 1973 ~ 1976년, 2007 ~ 2010년입니다. 
+
+1906 ~ 1908년 시기에는 1907년 공황이 있었습니다. 대공황 이전 최대의 공황으로 손꼽히는 시기였습니다. 이 시기에는 금융 기관들의 보유 지급 준비금이 너무 낮고 시장 규제 체제가 미비해 레버리지를 동원한 주가 조작이 성행했습니다. 주가 조작 실패에 대한 시장 불안으로 뱅크런 사태가 일어났고, 니커보커의 파산으로 공황이 본격적으로 일어났습니다. 공황 동안 주식 시장은 최대 34%, 10년 만기 미국 국채는 3.6%, 6:4 전략은 22%가 하락했습니다. 
+
+1929 ~ 1936년 시기는 대공황 시기와 이후 회복기입니다. 대공황은 1차 대전 이후의 1920년대 호황에서의 거품이 꺼지고, 1929년 10월 주가 대폭락으로 본격적으로 진행되었습니다. 독일은 이 시기에 1차 대전 여파로 인한 하이퍼 인플레이션으로 고생했고, 유럽 전역으로 위기가 확산되는 등 전세계가 공황에 빠졌습니다. 이 시기에 주식 시장은 84% 하락을 경험했고, 10년 만기 국채는 15% 하락을 경험했습니다. 6:4 전략은 최대 63% 하락을 겪었습니다. 
+
+1937 ~ 1943년 시기는 2차 대전과 겹치는 시기입니다. 미국은 1937년에 연방준비제도가 대공황이 끝났다고 생각해 기준금리를 급하게 올렸고, 이것이 주식 시장 폭락을 가져왔습니다. 1937년 3월 ~ 1938년 3월 기간 동안 49.8% 하락했습니다. 같은 기간 10년 만기 국채는 4.1% 올랐고, 6:4 전략은 최대 31% 하락을 겪었습니다. 본격적인 2차 대전 기간 동안은 6:4 전략도 하락한 해가 있었으나, 미국은 처음부터 참전했던 것은 아니었고 본토의 피해도 거의 없었기 때문에 약간의 조정만 겪었습니다. 
+
+1973 ~ 1976년 시기는 오일 쇼크가 있던 시기입니다. 중동 전쟁의 과정에서 산유국들은 석유 감산을 했고, 전쟁이라는 리스크에 공급 부족으로 유가가 폭등했습니다. 미국은 베트남 전쟁이 끝난지 얼마 되지 않아 전쟁 비용을 충당하기 위해 적자 재정을 펼치고, 금태환제를 깨는 등 경기 상황이 매우 좋지 않았는데 유가 급등으로 물가가 치솟아 어쩔 수 없이 연준은 금리를 올렸습니다. 이 금리 상승은 주식과 국채 모두 부진한 수익을 거두게 했습니다. 이 기간 동안 주식 시장은 최대 42%, 6:4 전략은 26% 하락을 경험했습니다. 
+
+1979 ~ 1981년에도 2차 오일쇼크가 있었으나, 1차 쇼크와는 달리 IT와 원자재 기업들은 잘 버텨냈고, 오히려 인플레이션을 잡기 위한 급격한 금리 상승으로 국채 수익률이 부진했습니다. 6:4 전략은 최대 11% 정도 하락으로 끝났습니다. 
+
+2007 ~ 2010년 시기는 익숙한 2008년 금융위기가 있던 시기입니다. 주식 시장은 최대 -51%의 하락을 경험했고, 6:4 전략은 국채의 방어력으로 -26% 하락으로 막아냈습니다. 6:4 전략 등 주식-국채로만 만든 자산배분 전략은 시장을 넘어서는 국가 전체의 혼란과 인플레이션 두 가지에 의해 크게 흔들립니다. 시장을 넘어서는 국가 전체의 혼란은 전략 자체의 방어 기능을 추가하여 시장 상황이 좋지 않으면 시장 노출 비중을 크게 줄이도록 설계할 수 있습니다. 이런 방식은 동적 자산배분의 일종으로, 다른 장에서 보겠습니다. 인플레이션에 대응하려면 자산배분 전략에 주식과 국채와는 인플레이션에 다르게 반응하는 자산들을 추가해야 합니다. 인플레이션에 강한 자산으로는 금, 원자재, TIPS, REITs 등이 알려져 있고, 이들 자산군을 전략에 편입하는 것을 생각해 볼 수 있습니다. 정적 자산배분의 관점에서 저 자산군을 편입하기 위한 논의를 하겠습니다.
+
+## 3.2. 유대인 전략
+
+유대인들이 만든 전략으로, 수천년 전에 쓰여진 탈무드에 등장합니다. 자산을 3등분하여 토지(부동산), 사업(주식), 여유 자금(현금)으로 가지고 있으라는 것입니다. 전략에서 현금을 보유하기 때문에 변동성이 낮아질 것으로 보입니다. S&P 500 지수, NA REIT(북미 리츠), T-Bill (단기 국채) 세 가지 자산군으로 테스트하겠습니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_JEW = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$NAREIT, ReturnTimeSeries$`T-Bills`) %>% 
+  na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 유대인 --> 주식 : 리츠 : 현금 1 : 1 : 1
+port_JEW = Return.portfolio(R = rets_JEW, weights = c(1/3, 1/3, 1/3), rebalance_on = 'years')
+JEW = cbind(rets_JEW, port_JEW) %>% setNames(c('S&P 500', 'NAREIT', 'T-Bill', 'Jewish portfolio'))
+charts.PerformanceSummary(JEW, main = 'Jewish portfolio')
+
+Return.cumulative(port_JEW)
+Return.annualized(port_JEW)
+Return.cumulative(rets_JEW)
+Return.annualized(rets_JEW)
+
+StdDev.annualized(port_JEW)
+StdDev.annualized(rets_JEW)
+
+SharpeRatio.annualized(port_JEW, Rf = rets_JEW$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_JEW, Rf = rets_JEW$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_JEW)
+maxDrawdown(rets_JEW)
+
+```
+
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('유대인 전략', 'S&P 500', '리츠', '현금'),
+    'v2' = c('63.71배', '150.8배', '82.64배', '9.12배'),
+    'v3' = c('8.85%', '10.78%', '9.43%', '4.61%'),
+    'v4' = c('9.67%', '15.25%', '17.52%', '0.99%'),
+    'v5' = c('0.419', '0.387', '0.262', '0'),
+    'v6' = c('41.39%', '50.95%', '67.88%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 9: 유대인 전략 성과: 1972.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_JEW)
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+cor(subset(ReturnData, select=c('S&P 500 Total return', 'NAREIT')), use='complete.obs')
+
+```
+
+유대인 자산배분 전략은 1972년부터 누적 수익률 63.7배, 연복리 수익률 8.85%로 준수합니다. 같은 기간 S&P 500은 연 10.78%, 리츠는 연 9.43% 수익을 냈습니다. 변동성은 유대인 전략이 연 9.67%, S&P 500은 15.25%, 리츠는 연 17.52%로 유대인 전략은  수익을 약간 희생하지만 변동성을 크게 낮추는 전략입니다. 샤프 비율에서도 유대인 전략은 0.419, S&P 500은 0.387, 리츠는  0.262으로 위험 대비 수익 기준으로 괜찮은 전략입니다. 수천년 전에 나온 전략인데도 불구하고, 꽤 잘 작동합니다. 이 전략의  결함은 최대 낙폭입니다. 2007년 6월 ~ 2009년 2월까지 41.4% 하락을 경험했습니다. 변동성도 낮고 위험 대비 수익도 괜찮으나,  40%가 넘는 하락은 좋지 않습니다. 분산투자를 했는데 하락폭이 이렇게 큰 이유는 상관관계 때문입니다. 1972년부터 S&P 500과  리츠는 0.605의 상관관계를 가지고 있습니다. 상관계수가 꽤 높으므로 다른 자산군이지만 분산 효과는 미미합니다. 자산군 분산  전략은 상관관계가 작은 자산들로 구현할 때 원래의 의도대로 작동할 것입니다. 
+
+
+## 3.3. Harry Brown 영구 포트폴리오
+
+비교적 간단한 전략을 먼저 보겠습니다. Harry Brown이라는 사람이 만든 영구 포트폴리오라는 것입니다. 주식 25%, 장기 국채 25%, 금 25%, 현금 25%를 가져가는 전략입니다. 전략의 논리는 주식의 위험을 장기 국채로 낮추고, 고인플레이션 시기에 주식과 국채가 부진할 때 금이 대안으로 들어가 있고, 대공황과 같은 현금이 왕이 되는 최악의 상황을 위해 현금을 가지고 간다는 것입니다. 현금 비중이 있기 때문에 변동성은 낮을 수밖에 없는 전략이고, 국채, 금, 현금 모두 주식보다는 장기적인 수익률은 부족하므로 위험 대비 수익이 주식 시장보다 높게 나온다면 괜찮은 전략일 것입니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_Permanent = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$GOLD,
+                       ReturnTimeSeries$`T-Bills`) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 영구 --> 주식 : 장기국채 : 금 : 현금 1 : 1 : 1 : 1
+port_Permanent = Return.portfolio(R = rets_Permanent, weights = c(1/4, 1/4, 1/4, 1/4), rebalance_on = 'years')
+Permanent = cbind(rets_Permanent, port_Permanent) %>% setNames(c('S&P 500', 'US 30 YR', 'GOLD', 'T-Bills', 
+                                                                 'Permanent portfolio'))
+
+charts.PerformanceSummary(Permanent, main = 'Permanent portfolio')
+
+Return.cumulative(port_Permanent)
+Return.annualized(port_Permanent)
+Return.cumulative(rets_Permanent)
+Return.annualized(rets_Permanent)
+
+StdDev.annualized(port_Permanent)
+StdDev.annualized(rets_Permanent)
+
+SharpeRatio.annualized(port_Permanent, Rf = rets_Permanent$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_Permanent, Rf = rets_Permanent$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_Permanent)
+maxDrawdown(rets_Permanent)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Harry Brown 영구 포트폴리오', 'S&P 500', '30년 만기 국채', 'GOLD', '현금(T-Bill)'),
+    'v2' = c('773배', '19737배', '288배', '91.8배', '30.0배'),
+    'v3' = c('6.81%', '10.29%', '5.77%', '4.58%', '3.42%'),
+    'v4' = c('6.60%', '18.46%', '9.96%', '14.60%', '0.85%'),
+    'v5' = c('0.496', '0.360', '0.227', '0.08', '0'),
+    'v6' = c('30.21%', '83.66%', '25.84%', '64.97%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 10: Harry Brown 영구 포트폴리오 성과: 1920.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_Permanent)
+
+```
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: Harry Brown 영구 포트폴리오 그래프
+R.yr = apply.yearly(na.omit(Permanent$`Permanent portfolio`), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+cor(subset(ReturnData, select=c('T-Bills', 'S&P 500 Total return', 'US 30 YR', 'GOLD')), use='complete.obs') %>%
+  corrplot(method = 'color', type = 'upper', addCoef.col = 'black', number.cex = 0.7, tl.cex = 0.6, tl.srt = 45,
+           tl.col = 'black', col = colorRampPalette(c('blue','white','red'))(200),
+           mar = c(0, 0, 0.5, 0))
+
+```
+
+영구 포트폴리오는 1920년부터 누적 수익률 773배, 연복리 수익률 6.80%를 기록했습니다. 같은 기간 S&P 500은 연 10.29%를  기록해 수익률에서는 다소 모자라 보입니다. 연간 변동성에서는 영구 포트폴리오는 6.60%, S&P 500은 18.46%를 기록하여 변동성이 1/3로 매우 견고한 전략입니다. 위험 대비 수익인 샤프 비율도 영구 포트폴리오가 0.496, S&P 500이 0.360으로 영구 포트폴리오가 더 좋습니다. 최대 낙폭도 대공황 시기만 30% 수준이고, 나머지는 15% 이하로 막아냅니다. 따라서, 위험을 감수할 생각이 전혀 없으며 전략을 매우 긴 시간 유지할 수 있고, 연 6% 수준의 수익이 필요하다면 훌륭한 전략입니다. 장기 상관관계로 보아도 전략의 구성 자산인 주식, 국채, 금, 현금이 상관관계가 거의 0입니다. 자산배분 전략은 상관관계가 낮은 우상향하는 자산에 분산 투자하는 것이므로, Harry Brown의 영구 포트폴리오는 그 목적에 적합합니다. 이후 나올 전략들도 주식, 국채, 금을 기반으로 움직이는 전략들입니다.
+
+## 3.4. Tyler - Golden Butterfly (황금나비)
+
+영구 포트폴리오만 가지고도 자산배분 전략에서는 매우 안정적입니다. 그러나, 안정성만이 아니라 수익성도 생각해야 합니다. Portfoliochart라는 사이트를 운영하는 Tyler라는 사람은 Golden Butterfly, 일명 황금나비 전략을 제안했습니다. 영구 포트폴리오를 일부 수정한 전략으로, 한쪽 날개는 주식, 한쪽 날개는 채권, 가운데는 금이 있는 것이 나비처럼 보여 저렇게 이름을 붙였다 합니다. 구성은 주가지수 20%, 소형 가치주 20%, 장기국채 20%, 단기국채 20%, 금 20%입니다. 영구 포트폴리오의 기본 틀은 유지하면서 변동성과 수익률을 높게 가져가는 전략일 것이고, 데이터로 보겠습니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_GoldenButterfly = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`Small Value`, 
+                       ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$`T-Bills`, ReturnTimeSeries$GOLD) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 황금나비: 주가지수 : 소형가치주 : 장기국채 : 단기국채 : 금 = 1 : 1 : 1 : 1 : 1
+port_GoldenButterfly = Return.portfolio(R = rets_GoldenButterfly, weights = c(1/5, 1/5, 1/5, 1/5, 1/5), 
+                                        rebalance_on = 'years')
+
+GoldenButterfly = cbind(rets_GoldenButterfly, port_GoldenButterfly) %>% 
+  setNames(c('S&P 500', 'Small Value', 'US 30 YR', 'T-Bills', 'GOLD', 'GoldenButterfly'))
+
+charts.PerformanceSummary(GoldenButterfly, main = 'GoldenButterfly')
+
+Return.cumulative(port_GoldenButterfly)
+Return.annualized(port_GoldenButterfly)
+Return.cumulative(rets_GoldenButterfly)
+Return.annualized(rets_GoldenButterfly)
+
+StdDev.annualized(port_GoldenButterfly)
+StdDev.annualized(rets_GoldenButterfly)
+
+SharpeRatio.annualized(port_GoldenButterfly, Rf = rets_GoldenButterfly$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_GoldenButterfly, Rf = rets_GoldenButterfly$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_GoldenButterfly)
+maxDrawdown(rets_GoldenButterfly)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Golden Butterfly', 'S&P 500', 'Small Value', 'US 30 YR', 'GOLD', '현금(T-Bill)'),
+    'v2' = c('3134배', '9995배', '321732배', '176배', '91.8배', '23.3배'),
+    'v3' = c('8.89%', '10.24%', '14.36%', '5.63%', '4.90%', '3.39%'),
+    'v4' = c('10.01%', '18.75%', '28.22%', '10.21%', '15.09%', '0.88%'),
+    'v5' = c('0.532', '0.353', '0.377', '0.212', '0.096', '0'),
+    'v6' = c('47.40%', '83.66%', '88.82%', '25.84%', '64.97%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 11: Golden Butterfly 성과: 1926.07 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_GoldenButterfly)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: GoldenButterfly 그래프
+R.yr = apply.yearly(na.omit(GoldenButterfly$GoldenButterfly), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1926년 7월부터 누적 수익률 3134배, 연복리 수익률 8.89%, 연간 변동성 10%로 수익률도 변동성도 영구 포트폴리오보다 높습니다. 샤프 비율 0.532로 0.5를 넘는 전략이 나타났습니다. 한 가지 결함은 최대 낙폭입니다. 소형 가치주가 연복리 14.36%라는 압도적인 수익을 내지만(차트 상에서도 나타납니다) 대공황 시기에 89% 하락을 경험하는데, 이 때문에 Golden Butterfly 전략도 대공황 시기 최대 낙폭이 47.4%나 됩니다. 대공황 시기에는 현금을 제외하고는 모든 자산군이 부진했으니 논외로 한다면 1937년 3월부터 1938년 3월까지의 27.4% 하락이 그 다음입니다.
+
+## 3.5. Ray Dalio & Tony Robbins - All Seasons
+
+위험 균형 전략의 1세대이고, 세계 최대의 헤지펀드 중 하나인 Bridgewater Associates의 설립자 Ray Dalio는 Tony Robbins의 Money 라는 책에서 초보 투자자들을 위한 다각화가 잘 된 자산배분 전략을 추천했습니다. All Seasons 포트폴리오라고도 불리고, 비중은 주식 30%, 중기 국채 15%, 장기 국채 40%, 금 7.5%, 원자재 7.5%를 보유합니다. 금과 원자재가 들어갔으니 인플레이션에 대한 방어는 잘 될 것으로 보이고, 주식 비중이 낮아져서 수익률은 약간 낮아질 것처럼 보이는 전략입니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_All_Seasons = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`US 10 YR`, 
+                         ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$GOLD, ReturnTimeSeries$GSCI) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons = Return.portfolio(R = rets_All_Seasons, weights = c(0.3, 0.15, 0.4, 0.075, 0.075), 
+                                    rebalance_on = 'years')
+
+All_Seasons = cbind(rets_All_Seasons, port_All_Seasons) %>% setNames(c('S&P 500', 'US 10 YR', 'US 30 YR', 'GOLD',
+                                                                       'Commodities', 'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons, main = 'All Seasons Portfolio')
+
+Return.cumulative(port_All_Seasons)
+Return.annualized(port_All_Seasons)
+Return.cumulative(rets_All_Seasons)
+Return.annualized(rets_All_Seasons)
+
+StdDev.annualized(port_All_Seasons)
+StdDev.annualized(rets_All_Seasons)
+
+SharpeRatio.annualized(port_All_Seasons, Rf = ReturnTimeSeries$`T-Bills`[841:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons, Rf = ReturnTimeSeries$`T-Bills`[841:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons)
+maxDrawdown(rets_All_Seasons)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'S&P 500', 'US 10 YR', 'US 30 YR', 'GOLD', 'GSCI'),
+    'v2' = c('116.2배', '179.3배', '39.7배', '63.3배', '53.6배', '19.8배'),
+    'v3' = c('9.77%', '10.71%', '7.49%', '8.47%', '8.12%', '6.03%'),
+    'v4' = c('8.22%', '15.30%', '8.17%', '12.74%', '19.74%', '20.31%'),
+    'v5' = c('0.597', '0.379', '0.333', '0.287', '0.167', '0.065'),
+    'v6' = c('13.32%', '50.95%', '15.79%', '25.84%', '64.97%', '80.90%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 12: All Seasons 성과: 1970.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons 전략
+R.yr = apply.yearly(na.omit(All_Seasons$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+원자재 지수인 GSCI가 1970년부터 존재하므로, 1970년 1월부터의 테스트입니다. 테스트 기간이 다소 짧아지기는 했지만, 인플레이션에 대한 대응의 문제로 6:4 전략 등 전통적인 주식-국채 자산배분 전략을 업그레이드 하게 된 것이므로 심각한 인플레이션이 있던 70년대와 80년대 초반을 포함하므로 괜찮다고 생각합니다. 4계절 전략은 1970년 1월부터 누적 수익률 116.2배, 연복리 수익률 9.77%, 연간 변동성 8.22%, 샤프 지수 0.597, 최대 낙폭 13.3%라는 성과를 냅니다. 기존 6:4 전략이 인플레이션이 심했던 1차 오일쇼크 시기(1973 ~ 1976년) 최대 26% 하락을 경험했으나, 4계절 전략은 최대 12% 하락으로 막아냅니다. 주식-국채 자산배분의 기본 틀은 유지하면서 주식 시장의 위험을 방어하고, 주식-국채가 둘 다 부진하게 되는 고인플레이션 시기를 금과 원자재로 방어하는 식으로 전략을 구조적으로 개선시켰습니다. 원자재를 금으로 대체하여 더 먼 과거에도 저런 사프 지수를 낼 수 있는지 보겠습니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# All seasons - 원자재 금으로 대체
+rets_All_Seasons_2 = cbind(ReturnTimeSeries$`S&P 500 Total return`, ReturnTimeSeries$`US 10 YR`, 
+                         ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$GOLD) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons_2 = Return.portfolio(R = rets_All_Seasons_2, weights = c(0.3, 0.15, 0.4, 0.15), 
+                                    rebalance_on = 'years')
+All_Seasons_2 = cbind(rets_All_Seasons_2, port_All_Seasons_2) %>% setNames(c('S&P 500', 'US 10 YR', 'US 30 YR', 'GOLD',
+                                                                             'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons_2, main = 'All Seasons Portfolio, gold 15%')
+
+Return.cumulative(port_All_Seasons_2)
+Return.annualized(port_All_Seasons_2)
+Return.cumulative(rets_All_Seasons_2)
+Return.annualized(rets_All_Seasons_2)
+
+StdDev.annualized(port_All_Seasons_2)
+StdDev.annualized(rets_All_Seasons_2)
+
+SharpeRatio.annualized(port_All_Seasons_2, Rf = ReturnTimeSeries$`T-Bills`[241:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons_2, Rf = ReturnTimeSeries$`T-Bills`[241:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons_2)
+maxDrawdown(rets_All_Seasons_2)
+
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'S&P 500', 'US 10 YR', 'US 30 YR', 'GOLD'),
+    'v2' = c('1661배', '19737배', '174배', '288배', '91.8배'),
+    'v3' = c('7.62%', '10.29%', '5.24%', '5.77%', '4.58%'),
+    'v4' = c('7.85%', '18.46%', '6.65%', '9.96%', '14.60%'),
+    'v5' = c('0.517', '0.360', '0.264', '0.227', '0.076'),
+    'v6' = c('35.72%', '83.66%', '15.79%', '25.84%', '64.97%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 13: All Seasons (Gold 15%) 성과: 1920.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons_2)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons 전략 (GOLD 15%)
+R.yr = apply.yearly(na.omit(All_Seasons_2$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1920년부터로 늘렸습니다. 누적 수익률 1661.4배, 연복리 수익률 7.62%, 연간 변동성 7.85%, 샤프 비율 0.517로 여전히 안정적이며 황금나비 전략과 함께 샤프 비율 0.5를 넘습니다. 최대 낙폭은 대공황 시절의 -35.7%로 Golden Butterfly(황금나비) 전략보다는 안정적입니다. 지금까지 테스트한 정적 자산배분 전략 중에서는 올시즌스와 황금나비 전략이 가장 좋아 보입니다.
+
+## 3.6. 전략 개선 - GoldenButterfly
+
+이 전략들에 대해서도 약점을 찾고, 개선할 방법을 찾아야 합니다. 일시적인 기간 또는 특정 경제 사이클에서 좋았다고 해서 그 다음 사이클에서도 좋으리라는 보장은 없습니다. 샤프 비율이 가장 좋았던 두 전략인 올시즌스 전략과 황금나비 전략을 위주로 개선하겠습니다. 황금나비 전략의 첫번째 문제는 주식이 미국에만 집중되어 있는 것입니다. 2000 ~ 2010년까지의 미국 주식은 수익을 올리지 못했습니다. 이런 10년이 다시 오지 않으리라는 법이 없으므로, 대비해야 합니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_GoldenButterfly_2 = cbind(ReturnTimeSeries$`World Stocks`, ReturnTimeSeries$`Small Value`, 
+                               ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$`T-Bills`, ReturnTimeSeries$GOLD) %>% 
+                               na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 황금나비 2 : 전세계 : 소형가치 : 장기국채 : 단기국채 : 금  = 1 : 1 : 1 : 1 : 1
+port_GoldenButterfly_2 = Return.portfolio(R = rets_GoldenButterfly_2, weights = c(1/5, 1/5, 1/5, 1/5, 1/5), 
+                                          rebalance_on = 'years')
+
+GoldenButterfly_2 = cbind(rets_GoldenButterfly_2, port_GoldenButterfly_2) %>% 
+  setNames(c('World Stock', 'Small Value', 'US 30 YR', 'T-Bills', 'GOLD', 'GoldenButterfly_2'))
+
+charts.PerformanceSummary(GoldenButterfly_2, main = 'GoldenButterfly_2')
+
+Return.cumulative(port_GoldenButterfly_2)
+Return.annualized(port_GoldenButterfly_2)
+Return.cumulative(rets_GoldenButterfly_2)
+Return.annualized(rets_GoldenButterfly_2)
+
+StdDev.annualized(port_GoldenButterfly_2)
+StdDev.annualized(rets_GoldenButterfly_2)
+
+SharpeRatio.annualized(port_GoldenButterfly_2, Rf = rets_GoldenButterfly_2$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_GoldenButterfly_2, Rf = rets_GoldenButterfly_2$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_GoldenButterfly_2)
+maxDrawdown(rets_GoldenButterfly_2)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Golden Butterfly_2', 'World Stock', 'Small Value', 'US 30 YR', 'GOLD', '현금(T-Bill)'),
+    'v2' = c('2448배', '3257배', '321732배', '176배', '91.8배', '23.3배'),
+    'v3' = c('8.61%', '8.94%', '14.36%', '5.63%', '4.90%', '3.39%'),
+    'v4' = c('9.19%', '14.50%', '28.22%', '10.21%', '15.09%', '0.88%'),
+    'v5' = c('0.550', '0.370', '0.377', '0.212', '0.096', '0'),
+    'v6' = c('42.03%', '71.33%', '88.82%', '25.84%', '64.97%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 14: Golden Butterfly_2 (with World Stock) 성과: 1926.07 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_GoldenButterfly_2)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: GoldenButterfly_2 그래프
+R.yr = apply.yearly(na.omit(GoldenButterfly_2$GoldenButterfly_2), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1926년 7월부터 누적 수익률 2448배, 연복리 수익률 8.61%, 연간 변동성 9.19%, 샤프 비율 0.550으로 개선되었습니다. 최대 낙폭은 대공황 시기의 42%로, 아직 낙폭이 크지만 원래 버전보다는 개선되었습니다. 2차대전 시기의 22.4% 하락 이후로는 20% 이상의 하락을 경험하지 않습니다. 
+
+GoldenButterfly 전략은 case 2에 해당하는 전세계주식, 미국 소형가치주, 장기국채, 금, 단기국채(현금)의 구성으로 확정합니다. 변동성을 올려주면 샤프 비율이 높기 때문에 주식 시장보다 낮은 변동성으로 주식 시장보다 높은 수익을 낼 수 있을 것입니다. 차입으로 변동성을 맞추는 방식과 일간 수익률을 레버리지해서 맞추는 방식 모두 보겠습니다. 먼저 차입으로 변동성을 올린 경우입니다. 편의 상 각 자산군의 비중을 1.5배로 늘리고, 현금 역할인 단기국채를 음의 비중으로 넣어 차입에 대한 이자를 내는 것처럼 구현합니다. 
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_GoldenButterfly_3 = cbind(ReturnTimeSeries$`World Stocks`, ReturnTimeSeries$`Small Value`, 
+                               ReturnTimeSeries$`US 30 YR`, ReturnTimeSeries$`T-Bills`,  
+                               ReturnTimeSeries$GOLD) %>% 
+                               na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 황금나비 3 : 전세계주식 : 소형가치 : 장기국채 : 단기국채 : 금  = 1 : 1 : 1 : 1 : 1
+port_GoldenButterfly_3 = Return.portfolio(R = rets_GoldenButterfly_3, weights = c(3/10, 3/10, 3/10, -1/5, 3/10), 
+                                          rebalance_on = 'years')
+
+GoldenButterfly_3 = cbind(rets_GoldenButterfly_3, port_GoldenButterfly_3) %>% 
+  setNames(c('World Stock', 'World Small Value', 'US 30 YR', 'T-Bills', 'GOLD', 'GoldenButterfly_3'))
+
+charts.PerformanceSummary(GoldenButterfly_3, main = 'GoldenButterfly_3')
+
+Return.cumulative(port_GoldenButterfly_3)
+Return.annualized(port_GoldenButterfly_3)
+Return.cumulative(rets_GoldenButterfly_3)
+Return.annualized(rets_GoldenButterfly_3)
+
+StdDev.annualized(port_GoldenButterfly_3)
+StdDev.annualized(rets_GoldenButterfly_3)
+
+SharpeRatio.annualized(port_GoldenButterfly_3, Rf = rets_GoldenButterfly_3$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_GoldenButterfly_3, Rf = rets_GoldenButterfly_3$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_GoldenButterfly_3)
+maxDrawdown(rets_GoldenButterfly_3)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+table.Drawdowns(port_GoldenButterfly_3)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Golden Butterfly_3', 'World Stock', 'World Small Value', 'US 30 YR', 'GOLD', '현금(T-Bill)'),
+    'v2' = c('17088배', '3257배', '321732배', '176배', '91.8배', '23.3배'),
+    'v3' = c('10.86%', '8.94%', '14.36%', '5.63%', '4.90%', '3.39%'),
+    'v4' = c('13.62%', '14.50%', '28.22%', '10.21%', '15.09%', '0.88%'),
+    'v5' = c('0.531', '0.370', '0.377', '0.212', '0.096', '0'),
+    'v6' = c('58.87%', '71.33%', '88.82%', '25.84%', '64.97%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 15: Golden Butterfly_3 (1.5x 차입) 성과: 1926.07 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: GoldenButterfly_3 그래프
+R.yr = apply.yearly(na.omit(GoldenButterfly_3$GoldenButterfly_3), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+누적 수익률 17088배, 연복리 수익률 10.86%, 연 변동성 13.62%로 주식 시장보다 수익률은 높고 변동성은 낮은 전략이 나왔습니다. 샤프 비율은 0.525로 차입 없이 할 때보다 약간 낮아졌으나, 최적화 없이 진행한 것이고 황금나비 전략 자체가 자산군별 비중을 고정하기 때문에 별 문제가 되지 않습니다. 대신 레버리지를 사용하다보니 경험하는 낙폭은 상당히 커졌습니다. 레버리지 없이 진행하는 전략은 20% 이상의 하락은 94년 동안 2번 나왔으나, 레버리지를 적용하자 20% 이상의 하락이 5번 이상 등장합니다. 하락을 견딜 수 있다면 괜찮은 방식입니다.
+
+일반적인 개인 투자자가 구현하기에 조금 더 쉬운 방식인 자산군 수익률의 n배수를 하겠습니다. 레버리지 ETF를 쓰는 것과 비슷한 방식입니다. (레버리지 ETF는 일간 수익률 기준으로 만들기 때문에 현재 구현하는 것과 같을 수 없습니다) 레버리지 ETF 비용은 무시하고 진행합니다. 1.6배 정도의 레버리지를 하겠습니다. 현금(단기국채)에 대한 레버리지는 보통 하지 않으므로 그것은 제외합니다.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+rets_GoldenButterfly_4 = cbind(ReturnTimeSeries$`World Stocks` * 1.6, ReturnTimeSeries$`Small Value` * 1.6, 
+                               ReturnTimeSeries$`US 30 YR` * 1.6, ReturnTimeSeries$`T-Bills`,  
+                               ReturnTimeSeries$GOLD * 1.6) %>% 
+                               na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# 황금나비 4 : 전세계주식 : 소형가치 : 장기국채 : 단기국채 : 금  = 1 : 1 : 1 : 1 : 1
+port_GoldenButterfly_4 = Return.portfolio(R = rets_GoldenButterfly_4, weights = c(1/5, 1/5, 1/5, 1/5, 1/5), 
+                                          rebalance_on = 'years')
+
+GoldenButterfly_4 = cbind(rets_GoldenButterfly_4, port_GoldenButterfly_4) %>% 
+  setNames(c('World Stock', 'World Small Value', 'US 30 YR', 'T-Bills', 'GOLD', 'GoldenButterfly_4'))
+
+charts.PerformanceSummary(GoldenButterfly_4, main = 'GoldenButterfly_4')
+
+Return.cumulative(port_GoldenButterfly_4)
+Return.annualized(port_GoldenButterfly_4)
+Return.cumulative(rets_GoldenButterfly_4)
+Return.annualized(rets_GoldenButterfly_4)
+
+StdDev.annualized(port_GoldenButterfly_4)
+StdDev.annualized(rets_GoldenButterfly_4)
+
+SharpeRatio.annualized(port_GoldenButterfly_4, Rf = rets_GoldenButterfly_4$T.Bills, geometric = TRUE)
+SharpeRatio.annualized(rets_GoldenButterfly_4, Rf = rets_GoldenButterfly_4$T.Bills, geometric = TRUE)
+
+maxDrawdown(port_GoldenButterfly_4)
+maxDrawdown(rets_GoldenButterfly_4)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+table.Drawdowns(port_GoldenButterfly_4)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Golden Butterfly_4', 'World Stock', 'World Small Value', 'US 30 YR', 'GOLD', '현금(T-Bill)'),
+    'v2' = c('156033배', '150034배', '22822191배', '2451배', '524배', '23배'),
+    'v3' = c('13.49%', '13.44%', '19.64%', '8.61%', '6.85%', '3.39%'),
+    'v4' = c('14.89%', '23.20%', '45.16%', '16.33%', '24.15%', '0.88%'),
+    'v5' = c('0.657', '0.420', '0.348', '0.309', '0.138', '0'),
+    'v6' = c('57.41%', '87.96%', '98.03%', '39.38%', '85.89%', '0')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 16: Golden Butterfly_4 (1.6x monthly return) 성과: 1926.07 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: GoldenButterfly_4 그래프
+R.yr = apply.yearly(na.omit(GoldenButterfly_4$GoldenButterfly_4), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+월간 수익률에 1.6배 레버리지를 한 결과입니다. 전략은 누적 수익률 156033배, 연복리 13.49%, 연 변동성 14.89%의 결과를 냅니다. 같은 기간 전세계 주식시장은 누적 150034배, 연복리 13.44%, 연 변동성 23.20%입니다. 주식시장보다 수익률이 높고 변동성은 낮은 전략이 나왔습니다. 샤프 비율은 0.657으로 레버리지 없는 전략보다 높습니다. 그러나, 하락폭은 확실히 큽니다. 차입으로 구현한 것과 마찬가지로 20% 이상의 하락이 5회 이상 발생합니다. 월간 수익률에 직접 레버리지 비율을 곱하기 때문에 전체적인 자산군의 성과가 좋을 때 효과가 극대화될 것입니다. 반대로 추세가 모호하다면 레버리지 배수보다 못한 수익이 나올 것입니다.  
+
+GoldenButterfly 전략을 정리하자면, 테스트 상으로는 전세계 주식, 미국 소형주, 미국 장기국채, 금, 미국 단기국채(현금)으로 20%씩 분배한 후 기호에 따라 레버리지를 사용하는 것이 가장 좋은 결과를 냅니다. 이제 Ray Dalio와 Tony Robbins의 올시즌스 전략을 개선해 보겠습니다. 
+
+
+## 3.7. 전략 개선 - All Seasons
+
+먼저 Ray Dalio와 Bridgewater Associates가 그들의 베타 전략인 all weather 전략에 대하여 설명한 내용을 보겠습니다. Ray Dailo와 Bridgewater Associates는 그들의 문서에서 울웨더 포트폴리오에 관하여 더 자세히 설명하고 있습니다. Bridgewater Associates는 어떤 경제 상황에 있더라도 꾸준한 수익을 내는 것을 원했습니다. 그들은 경제 상황을 인플레이션과 경제 성장을 가지고 4가지 경우로 정의했습니다. 각각은 (인플레이션율 기대 이상, 경제성장률 기대 이상), (인플레이션율 기대 이상, 경제성장률 기대 이하), (인플레이션율 기대 이하, 경제성장률 기대 이상), (인플레이션율 기대 이하, 경제성장률 기대 이하) 입니다. 그림으로 나타내면 다음과 같습니다. 
+
+#![](Macro_4Box_Chart1.jpg)
+
+경제 상황별 다양한 시나리오가 있을 것이나, 경제 성장률은 경제 활동의 양을, 인플레이션율은 가격 상승률을 의미한다고 생각하면 수량과 가격을 모두 고려한 것이므로, 두 가지 요인으로 만든 4가지 경우로 경제 상황을 설명할 수 있을 것입니다. 일반적으로 인플레이션이 높을 때 주식과 채권의 성과가 부진합니다. 대부분의 투자자는 인플레이션 방어를 위해 원자재만을 대안으로 생각합니다. Bridgewater Associates는 더 높은 수준의 다각화를 위하여 원금과 이자 지급액을 물가에 연동시키는 물가연동채권을 고안했습니다. 물가연동채권은 원자재처럼 인플레이션이 기대 이상일 때 방어 능력이 있는데, 경제 성장률에 관해서는 반대 성향을 가지고 있습니다. 그들의 연구에 따르면 각각의 경우에서 성과가 좋은 자산은 다음과 같습니다.
+
+#![](Macro_4Box_Chart2.jpg)
+
+경제 성장률이 기대보다 높으면 기업들이 기대보다 돈을 잘 벌었다는 것이 되므로 주식의 성과는 좋을 것입니다. 회사채도 돈을 잘 갚을 것으로 기대되니 좋을 것입니다. 원자재도 수요가 증가하여 가격이 오를 것이고 성과가 좋을 것입니다. 신흥국 국채 또한 신흥국이 원자재 수출을 하는 경우가 많고, 공급 체인 끝에 위치하여 전세계가 호황이라면 신흥국이 더 호황일 가능성이 높아 성과가 좋을 것입니다. 경제 성장률이 기대보다 낮으면 안전 자산을 선호하게 되므로 명목 국채의 성과가 좋을 것입니다. 물가연동채권 역시 명목 국채에 인플레이션을 보정해주는 것이므로 성과가 좋을 것입니다. 인플레이션이 기대 이상이라면 인플레이션을 보정하는 물가연동채권이 좋을 것이고, 물건 값이 오르는 시기이므로 원자재의 성과도 좋을 것입니다. 금은 먼 옛날부터 화폐의 역할을 가졌고, 인플레이션이 올 때마다(화폐 가치가 하락할 때마다) 주목받았으므로 인플레이션이 기대 이상일 때 좋을 것입니다. 신흥국 국채는 FED의 금리 인상 등 긴축 정책으로 신흥국의 부채 부담이 늘어나는 피해를 입지 않는다는 전제 하에 신흥국이 원자재를 파는 경우가 많아 수출 실적이 좋아져 신흥국 국채 성과도 좋을 수 있습니다.
+
+인플레이션이 기대 이하라면 대공황과 같은 상황이 아니라면 일반적으로 중앙 은행이 인플레이션을 목표치로 올리기 위해 화폐 공급을 늘릴 것이고, 그러면 할인율이 내려간 것으로 인식할 수 있어 자산 가격이 비싸지므로 국채와 주식이 괜찮습니다. 미래에 어떤 상황이 펼쳐질지 모른다는 가정 하에서 4가지 경우에 위험을 25%씩 분산하여 모든 상황에 대응할 수 있도록 하는 것이 목표입니다. 과거의 변동성과 성과를 가지고 미래의 리스크 비중을 예측하는 것이라 완벽하게 정확할 수는 없겠지만, 기존의 6:4나 4:6 전략보다 위험 대비 수익이 높을 것이고, Tony Robbins의 책에 나오는 올시즌스 포트폴리오보다 다각화 수준이 높아 장기적으로 우위를 가질 것입니다. Bridgewater Associates는 4가지 상황에 포트폴리오의 위험을 균등 배분한다는(Risk Parity) 점에서 이 전략을 All Weather 전략이라고도 부릅니다. 이런 전략이 언제 돈을 잃을지도 생각해보아야 합니다. 전략의 수익률이 현금보다 못하면 돈을 잃을 것입니다. 중앙은행이 긴축 정책을 하여 금리를 올리면 자산에 대한 할인율이 올라 자산이 만들어 줄 미래 현금흐름이 줄어들고, 자산들의 현재 가치가 떨어질 것입니다. 또한, 금리가 오르면 현금으로도 이자를 잘 받을 수 있어서 자산을 현금화하려는 움직임이 일어납니다. 이 경우 매우 드물게 전략 내 모든 자산군이 하락할 수 있으나, 투자와 소비 감소에 따른 경제 수축을 동반하므로 중앙은행이 개입하여 경제 수축을 막으려 할 것입니다. 그러므로, 이런 전략들이 약세인 구간이 있더라도 기존의 6:4, 주식 100% 같은 전략들보다는 회복도 빠르고 경험하는 하락폭도 작을 것입니다. 
+
+앞에서 본 All Seasons 전략의 문제점은 주식에서의 문제점, 국채에서의 문제점으로 나눌 수 있습니다. 주식은 GoldenButterfly 전략의 문제처럼 국가 분산이 필요합니다. 그러므로, 전세계 주식을 사용하는 것으로 하겠습니다. 국채의 문제점은 장기 국채와 중기 국채 두 가지 모두 사용해야 할 이유가 없습니다. 어차피 자산배분을 하여 변동성은 제한적이므로, 수익률을 높이기 위해 장기 국채만 사용하는 것으로 하겠습니다. 그리고, 장기 국채는 금리 하락 시에는 매우 좋지만 금리 상승 시에는 매우 취약합니다. 따라서, 금과 원자재를 포함하지만, 장기 국채의 손실을 더 방어하기 위해 물가연동채권을 사용할 것입니다. 주식은 전세계 주식을 사용하더라도 시가총액 가중 방식의 지수를 사용하기 떄문에 미국 주식을 배제하지 않으므로 괜찮지만, 장기 국채와 물가연동채권의 비중을 어떻게 가져갈 것인지, 물가연동채권의 만기는 어떻게 할 것인지, 장기 국채를 가져가는 것이 맞는지에 대한 문제가 있습니다. 그것은 다른 연구들을 보겠습니다. 
+
+코로나19로 인해 달러가 너무 많이 공급되었고 이것이 인플레이션을 부를 것이라는 우려가 있습니다. 그런 관점에서, 현재의 제로 금리는 금리 인하로부터 장기 국채가 얻어낼 수익이 없어진 것 같아 부정적으로 보입니다. 그러나, 금리를 예측하는 것은 아래 그림에서 보이듯이 가장 어려운 문제 중 하나입니다. 검은색의 진한 선이 실제 10년물 금리이고, 연한 선들이 채권 및 거시 경제 전문가들이 예측한 금리 방향입니다. 20년 동안 제대로 맞춘 적이 거의 없습니다. 
+
+#![](10Y_Yield_Prediction.jpg)
+
+그리고, 장기 국채를 대체하여 주식 시장의 위험을 헤지하고, 장기적으로 우상향하고, 개인 투자자들도 쉽게 접근할 수 있는 자산을 찾는 것은 매우 어렵습니다. 만약 인플레이션 상황으로 간다고 하더라도, 소비자물가지수에 맞게 원금과 이자를 보정하여 국채가 인플레이션에서 입는 피해를 방어하는 목적으로 설계된 물가연동채권도(TIPS) 만기가 긴 것을 사용해야 장기 국채를 대체하면서 수익을 낼 수 있는데, 장기 TIPS는 인플레이션 방어 기능은 그리 크지 않습니다. 그렇다고 만기가 짧은 TIPS를 사용한다면 인플레이션 방어는 될 수 있으나 만기가 짧으므로 수익률을 포기해야 하고, 일반적인 단기 국채와 큰 차이가 없습니다. Vanguard의 연구에 따르면, 단기적인 인플레이션 급등에서 10년 이상의 만기를 가지는 TIPS들은 인플레이션과의 수익 상관관계가 낮아 인플레이션 방어 효과가 떨어집니다. 아래 그림들이 TIPS 만기별 인플레이션과 수익률 사이의 상관관계를 나타낸 그림입니다. 
+
+#![](TIPS_Inflation_Corr1.jpg)
+
+#![](TIPS_Inflation_Corr2.jpg)
+
+PanAgora의 연구에 따르면, Bloomberg Global Treasury Index에 속한 국채 중 5년 간 평균 금리 1% 이하의 초저금리인 국가들과 (LY, Low Yielder) 나머지 국가들로(Ex-LY) 각각 Bloomberg Global Treasury Index 상에서의 비중으로 지수를 구성했을 때, LY가 평균금리 1% 이하가 된 2012년 ~ 2019년까지 기간에서 LY Index의 샤프 비율이 더 높다고 합니다. 그리고, 이 저금리 국가들은 만기가 긴 채권을 더 편하게 발행해버려 LY에서 만기가 증가 추세인데, 변동성은 크게 늘어나지 않아 과거보다 만기가 긴 채권을 쓰거나 채권을 선물을 이용해 레버리지해야 과거와 비슷한 효과를 기대할 수 있다고 합니다. 주식에 대한 헤지 기능도 금리가 비교적 높을 때 (1999 ~ 2012), 저금리 (2012 ~ 2019), 주식 시장이 좋을 때(high), 나쁠 때(low)로 나누어서 보여주는데 다행히 모든 경우에서 헤지 기능은 유지한다고 합니다.
+
+#![](Low_Yielders_Return.jpg)
+
+#![](LY_Stock_Hedge.jpg)
+
+그러므로, 장기 국채는 가져가고, 전세계적인 저금리 추세에 맞도록 비중을 낮추면서 편의상 물가연동국채와 1:1로 가져가는 것으로 해 보겠습니다. 
+
+Bridgewater Associates가 제시한 그림에서는 회사채와 신흥국 국채도 가져가는 것으로 되어 있습니다. 회사채는 결국 회사의 미래가 어떻게 되는가에 따라 움직이게 되므로 주식과 같이 움직일 수밖에 없습니다. 그러므로, 회사채는 테스트에서 제외합니다. 신흥국 국채는 지역 화폐로 발행된 것을 기준으로 한다면 인플레이션 시기에 원자재를 팔아 신흥국 경기가 좋을 것이라 신흥국 국채의 가치가 오르고, 인플레이션에 대한 방어가 가능할 것입니다. 그러나, 로컬 화폐로 발행된 국채들로 만들었으며, 만기가 충분히 길어서 수익률에 유의미한 도움을 줄 수 있는 투자 상품이 딱히 없습니다. 일반적인 투자자들이 국채를 직접 운용할 수는 없으므로 신흥국 국채도 제외합니다. 
+
+1차로 결정된 자산군은 전세계 주식, 미국 장기 국채, 미국 물가연동국채, 금, 원자재입니다. 최적화하기 전 초기 비중은 All Seasons 전략을 변형하여 주식 30 : 미국 장기 국채 27.5 : 미국 물가연동국채 27.5 : 금 7.5 : 원자재 7.5로 하겠습니다. 
+
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# All seasons - TIPS
+rets_All_Seasons_3 = cbind(ReturnTimeSeries$`World Stocks`, ReturnTimeSeries$`US 30 YR`, 
+                           ReturnTimeSeries$`TIPS Series`, ReturnTimeSeries$GOLD, 
+                           ReturnTimeSeries$GSCI) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons_3 = Return.portfolio(R = rets_All_Seasons_3, weights = c(0.3, 0.275, 0.275, 0.075, 0.075), 
+                                      rebalance_on = 'years')
+All_Seasons_3 = cbind(rets_All_Seasons_3, port_All_Seasons_3) %>% setNames(c('World Stocks', 'US 30 YR', 'TIPS', 'GOLD',
+                                                                             'Commodities', 'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons_3, main = 'All Seasons Portfolio with TIPS')
+
+Return.cumulative(port_All_Seasons_3)
+Return.annualized(port_All_Seasons_3)
+Return.cumulative(rets_All_Seasons_3)
+Return.annualized(rets_All_Seasons_3)
+
+StdDev.annualized(port_All_Seasons_3)
+StdDev.annualized(rets_All_Seasons_3)
+
+SharpeRatio.annualized(port_All_Seasons_3, Rf = ReturnTimeSeries$`T-Bills`[878:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons_3, Rf = ReturnTimeSeries$`T-Bills`[878:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons_3)
+maxDrawdown(rets_All_Seasons_3)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'World Stock', 'US 30 YR', 'TIPS', 'GOLD', 'Commodities'),
+    'v2' = c('62.7배', '80.1배', '46.2배', '26.2배', '28.6배', '9.6배'),
+    'v3' = c('9.02%', '9.58%', '8.38%', '7.05%', '7.25%', '4.84%'),
+    'v4' = c('7.47%', '15.03%', '12.90%', '6.05%', '20.04%', '20.89%'),
+    'v5' = c('0.563', '0.315', '0.278', '0.384', '0.125', '0.010'),
+    'v6' = c('17.16%', '53.65%', '25.84%', '11.89%', '64.97%', '80.90%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 17: All Seasons_3 (TIPS) 성과: 1973.02 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons_3)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons_3 전략 (TIPS)
+R.yr = apply.yearly(na.omit(All_Seasons_3$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1973년 2월부터 누적 수익률 62.7배, 연복리 수익률 9.02%, 연 변동성 7.47%, 샤프 비율 0.563으로 괜찮습니다. 테스트 기간 동안 최대 하락은 17%이며, 10%를 넘는 하락은 단 2회입니다. 
+
+이제 TIPS를 사용하는 전략을 최적화합니다. 최적화에는 위험 균형 방식이 많이 쓰이므로, 위험 균형 (Risk Parity) 방식을 테스트할 것입니다. 위험 균형 방식을 구현하기 위해서는 한계 위험기여도와 (Marginal Risk Contribution, MRC) 위험기여도를 (Risk Contribution, RC) 알아야 합니다. 한계 위험기여도는 특정 자산 비중을 1단위 증가시킬 때 전체 포트폴리오 위험의 증가를 나타내는 단위로, 편미분 개념입니다. $i$번째 자산의 한계 위험기여도는 다음과 같습니다.
+
+$$MRC_i = \frac{\partial\sigma_p}{\partial w_i}$$
+
+$\sqrt {f(x)} = \frac{f'(x)}{2\sqrt{f(x)}}$이므로, 한계 위험기여도는 다음과 같이 풀 수 있습니다. 결과적으로 분자는 분산-공분산 행렬과 각 자산의 비중의 곱, 분모는 포트폴리오의 표준편차 형태로 나타납니다.
+
+\begin{equation*} 
+\begin{split}
+\frac{\partial\sigma_p}{\partial w} & = \frac{\partial(\sqrt{w'\Omega w})}{\partial w} \\
+& =\frac{\partial(w'\Omega w)}{\partial w} \times \frac{1}{2\sqrt{w'\Omega w}} \\
+& =\frac{2\Omega w}{2\sqrt{w'\Omega w}} \\
+& =\frac{\Omega w}{\sqrt{w'\Omega w}}
+\end{split}
+\end{equation*} 
+
+위험기여도는 특정 자산이 포트폴리오에서 차지하는 위험 비중입니다. 한계 위험기여도가 크더라도 포트폴리오 내의 비중이 작으면 포트폴리오 전체에 대한 위험 기여도는 낮을 것이고, 반대로 한계 위험기여도가 작더라도 포트폴리오 내의 비중이 크면 포트폴리오 전체에 대한 위험 기여도는 높을 것입니다. 그러므로, 위험 기여도는 한계 위험기여도와 포트폴리오 내 비중의 곱으로 표현됩니다.
+
+$$RC_i = \frac{\partial\sigma_p}{\partial w_i} \times w_i$$
+위험기여도를 코드로 나타내면 다음과 같습니다. 먼저 포트폴리오 비중인 $w$와 분산-공분산 행렬인 covmat을 이용해 한계 위험기여도를 계산합니다. 그 후 비중 $w$를 곱해 위험기여도를 계산해 준 후 합계가 1이 되도록 표준화를 해줍니다.
+
+```{r}
+get_RC = function(w, covmat) {
+  port_vol = t(w) %*% covmat %*% w
+  port_std = sqrt(port_vol)
+  
+  MRC = (covmat %*% w) / as.numeric(port_std)
+  RC = MRC * w
+  RC = c(RC / sum(RC))
+  
+  return(RC)
+}
+```
+
+저렇게 직접 구할 수도 있지만, 매번 하기 번거로우니 cccp 패키지의 rp 함수를 사용하겠습니다. rp 함수를 사용하여 전체 구간에서의 위험 균형 방식의 최적화를 해 보겠습니다. 
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+covmat1 = cov(rets_All_Seasons_3)
+
+opt_rp1 = rp(x0 = rep(0.2, 5),
+             P = covmat1,
+             mrc = rep(0.2, 5))
+
+```
+
+x0는 최적화를 위한 초기값이고, 일단 동일 비중인 20%를 넣습니다. P는 variance-covariance matrix가 들어갑니다. mrc는 목표로 하는 자산별 위험 기여도 값이고, 위험 균형을 원하므로 20%씩 할당합니다.
+
+```{r message = FALSE, warning = FALSE}
+
+w1 = getx(opt_rp1) %>% drop()
+w1 = (w1 / sum(w1)) %>% round(., 4) %>% setNames(colnames(rets_All_Seasons_3))
+
+print(w1)
+
+```
+
+rp() 함수는 최적해를 찾고, getx() 함수로 해를 뽑아낸 후 drop() 함수로 벡터로 만듭니다. 그리고, 비중의 합이 1이 되도록 가공합니다. 1973년 2월 ~ 2020년 12월의 월간 데이터 기준으로, TIPS를 사용하는 All Seasons 전략을 위험 균형 최적화하면 전세계 주식 17.67%, 미국 장기 국채 21.99%, TIPS 33.82%, 금 13.04%, 원자재 13.48%를 가져가게 됩니다. 성과는 어떤지 테스트합니다.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# All seasons - TIPS & Risk Parity
+rets_All_Seasons_4 = cbind(ReturnTimeSeries$`World Stocks`, ReturnTimeSeries$`US 30 YR`, 
+                           ReturnTimeSeries$`TIPS Series`, ReturnTimeSeries$GOLD, 
+                           ReturnTimeSeries$GSCI) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons_4 = Return.portfolio(R = rets_All_Seasons_4, weights = c(0.1767, 0.2199, 0.3382, 0.1304, 0.1348), 
+                                      rebalance_on = 'years')
+All_Seasons_4 = cbind(rets_All_Seasons_4, port_All_Seasons_4) %>% setNames(c('World Stocks', 'US 30 YR', 'TIPS', 'GOLD',
+                                                                             'Commodities', 'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons_4, main = 'All Seasons Portfolio with TIPS and Risk Parity')
+
+Return.cumulative(port_All_Seasons_4)
+Return.annualized(port_All_Seasons_4)
+Return.cumulative(rets_All_Seasons_4)
+Return.annualized(rets_All_Seasons_4)
+
+StdDev.annualized(port_All_Seasons_4)
+StdDev.annualized(rets_All_Seasons_4)
+
+SharpeRatio.annualized(port_All_Seasons_4, Rf = ReturnTimeSeries$`T-Bills`[878:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons_4, Rf = ReturnTimeSeries$`T-Bills`[878:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons_4)
+maxDrawdown(rets_All_Seasons_4)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'World Stock', 'US 30 YR', 'TIPS', 'GOLD', 'Commodities'),
+    'v2' = c('52.1배', '80.1배', '46.2배', '26.2배', '28.6배', '9.6배'),
+    'v3' = c('8.60%', '9.58%', '8.38%', '7.05%', '7.25%', '4.84%'),
+    'v4' = c('7.29%', '15.03%', '12.90%', '6.05%', '20.04%', '20.89%'),
+    'v5' = c('0.522', '0.315', '0.278', '0.384', '0.125', '0.010'),
+    'v6' = c('19.49%', '53.65%', '25.84%', '11.89%', '64.97%', '80.90%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 18: All Seasons_4 (with TIPS and Risk Parity) 성과: 1973.02 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons_4)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons_4 전략 (TIPS and Risk Parity)
+R.yr = apply.yearly(na.omit(All_Seasons_4$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1973년 2월부터 누적 수익률 52.1배, 연복리 수익률 8.60%, 연 변동성 7.29%, 샤프 비율 0.522, 최대 하락폭 -19.49%를 기록합니다. Bridgewater Associates는 4가지 경제 상황을 정의하여 그 4가지 상황을 모두 대비할 수 있도록 동등한 위험을 부여하고자 했고, 이것이 risk parity 입니다. 현재 사용한 방식은 전체 기간의 risk parity를 맞추고, 그 값으로 계산한 성과이므로 완전한 risk parity라고 할 수 없습니다. 그러므로, 이번에는 분기별로 이전 12개월 수익률 기반으로 비중을 조정하여 risk parity를 맞추는 것으로 하겠습니다.
+
+먼저 기간별로 risk parity를 맞춘 투자 비중을 계산해야 합니다. 
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+# risk parity: 12m rolling, 3m rebalance
+rWindows = fPortfolio::rollingWindows(rets_All_Seasons_3, period = '12m', by = '3m')
+
+# rebalance date은 이럴 것임
+print(rWindows$to)
+
+# Apply FUN to time series R in the subset [from, to]
+ApplyFilter = function(from, to, R, FUN){
+  return(FUN(R[paste0(from, "/", to)]))
+}
+
+# For each pair (from, to) ApplyFilter to time-series R using FUN
+ApplyRolling = function(from, to, R, FUN){
+  # 반복 작업에 사용
+  library(purrr)
+  return(purrr::map2(from, to, ApplyFilter, R=R, FUN=FUN))
+}
+
+# Returns weights of a risk parity portfolio from covariance matrix of return r. Now: for 5 assets
+CalculateRiskParity = function(r){
+  library(cccp)
+  library(magrittr)
+  covmat = cov(r)
+  
+  opt_rp = rp(x0 = rep(1/5, 5),
+              P = covmat,
+              mrc = rep(1/5, 5))
+  
+  w = getx(opt_rp) %>% drop()
+  w = (w / sum(w)) %>% round(., 4) %>% setNames(colnames(r))
+  
+  return(w)
+}
+
+# Given a matrix return 'r'
+# calculates risk parity weights for each date in 'to' considering a time window from 'from' and 'to'
+RollingRiskParity = function(from, to, r){
+  library(rlist)
+  p = ApplyRolling(from, to, r, CalculateRiskParity)
+  names(p) = to
+  return(list.rbind(p))
+}
+
+# rWindows$from@Data: from의 Data만 추출
+parity.weights = RollingRiskParity(rWindows$from@Data, rWindows$to@Data, rets_All_Seasons_3)
+
+```
+
+1973년 2월부터의 데이터로 risk parity 계산을 했습니다. 기간별 구성을 그림으로 한 번 보겠습니다.
+
+```{r message = FALSE, warning = FALSE}
+
+PerformanceAnalytics::chart.StackedBar(parity.weights, 
+                                       xlab = 'Rebalance Dates', 
+                                       ylab = 'weight', 
+                                       main = 'All Seasons Risk Parity Composition')
+
+```
+
+이제 성과 분석을 하겠습니다. 1974년 1월부터 시작하게 됩니다.
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# All seasons - TIPS & Risk Parity - 12m rolling qtr rebalance
+rets_All_Seasons_5 = cbind(ReturnTimeSeries$`World Stocks`[889:1452], ReturnTimeSeries$`US 30 YR`[889:1452], 
+                           ReturnTimeSeries$`TIPS Series`[889:1452], ReturnTimeSeries$GOLD[889:1452], 
+                           ReturnTimeSeries$GSCI[889:1452]) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons_5 = Return.portfolio(R = rets_All_Seasons_5, weights = parity.weights)
+All_Seasons_5 = cbind(rets_All_Seasons_5, port_All_Seasons_5) %>% setNames(c('World Stocks', 'US 30 YR', 'TIPS', 'GOLD',
+                                                                             'Commodities', 'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons_5, main = 'All Seasons with TIPS and Rolling Risk Parity')
+
+Return.cumulative(port_All_Seasons_5)
+Return.annualized(port_All_Seasons_5)
+Return.cumulative(rets_All_Seasons_5)
+Return.annualized(rets_All_Seasons_5)
+
+StdDev.annualized(port_All_Seasons_5)
+StdDev.annualized(rets_All_Seasons_5)
+
+SharpeRatio.annualized(port_All_Seasons_5, Rf = ReturnTimeSeries$`T-Bills`[889:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons_5, Rf = ReturnTimeSeries$`T-Bills`[889:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons_5)
+maxDrawdown(rets_All_Seasons_5)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'World Stock', 'US 30 YR', 'TIPS', 'GOLD', 'Commodities'),
+    'v2' = c('42.2배', '93.9배', '52.5배', '24.4배', '16.6배', '5.7배'),
+    'v3' = c('8.29%', '10.15%', '8.79%', '7.04%', '6.15%', '3.77%'),
+    'v4' = c('6.80%', '14.99%', '12.81%', '6.08%', '19.22%', '20.48%'),
+    'v5' = c('0.524', '0.356', '0.316', '0.389', '0.078', '-0.037'),
+    'v6' = c('13.28%', '53.65%', '25.84%', '11.89%', '64.97%', '80.90%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 19: All Seasons_5 (with TIPS and Rolling Risk Parity) 성과: 1974.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons_5)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons_5 전략 (TIPS and Rolling Risk Parity)
+R.yr = apply.yearly(na.omit(All_Seasons_5$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+1974년 1월부터 누적 수익 42.2배, 연복리 수익률 8.29%, 연간 변동성 6.80%, 샤프 비율 0.524, 최대 하락폭 13.28%를 기록합니다. 다른 All Seasons 전략보다 변동성이 낮고 최대 하락폭이 작은 강점이 있습니다. 
+
+지금의 테스트는 레버리지 없이 구현한 결과입니다. Risk Parity 전략은 구조적으로 변동성이 낮은 자산에 비중이 크게 실리게 됩니다. 그러므로, 변동성이 낮은 자산에 레버리지를 사용하여 변동성을 키우고, 다른 기대 수익률이 더 높은 자산 비중을 늘려 수익을 더 추구할 수 있습니다. RPAR라는 ETF가 이런 방식으로 구현되어 있습니다. 주식, 국채, TIPS, 금, 원자재 생산 기업 주식을 편입한 ETF로 국채에 레버리지를 하고 나머지 자산군 비중을 높이는 방식입니다. 그들은 장기적으로 주식 25%, 원자재 생산 기업 주식 15%, 금 17.5%, 국채 42.5%, TIPS 20%로 120% 비중을 맞춥니다. 국채에 선물을 사용해서 레버리지를 구현하기 때문에 현금이 담보로 필요하고, 그것이 음의 비중을 가져가서 100%가 맞춰집니다. 변동성이 낮은 자산에 레버리지를 하는 것은 타당하나, 레버리지 비율을 어떤 기준으로 잡은 것인지, 어떤 자산군의 비중을 언제/얼마나 바꾸는지에 대한 설명이 모호합니다.
+
+또 다른 방식은 포트폴리오 전체의 risk parity를 맞추면서 target volatility를 설정해서 시장의 변동성이 작을 때는 레버리지를 가하고, 변동성이 클 때는 시장 노출을 1 미만으로 하여 동적으로 투자 비중을 조정하는 방식입니다. Bridgewater Associates의 베타 펀드인 All Weather 펀드, 동적 자산배분의 유행을 이끈 Resolve Asset Management의 펀드 등 헤지펀드에서 좋아하는 방식입니다. 이 방식으로 다시 구현해 보겠습니다.
+
+이전까지는 risk parity 계산에 패키지들을 주로 사용했습니다. 편하지만 입맛에 맞게 변형하기에는 제한적이므로, risk parity도 직접 구현하도록 하겠습니다.
+
+```{r}
+
+RiskParity_Objective = function(x){
+  
+  variance = t(x) %*% covmat %*% x
+  sigma = sqrt(variance)
+  MRC = (covmat %*% x) / as.numeric(sigma)
+  
+  rc = x * MRC
+  rc_target = matrix(1/ncol(covmat) * sigma, nrow(covmat), 1)
+  sum_risk_diff = sum((rc - rc_target)^2)
+  
+  return(sum_risk_diff)
+  
+}
+
+```
+
+구해진 rc 값과 rc_target의 차이를 최대한 줄이는 방향으로 최적화할 것입니다. 이제 제약 조건을 걸어야 합니다.
+
+```{r}
+
+inequal_objective = function(x){
+  return(x)
+}
+
+equal_objective = function(x){
+  return(sum(x)-1)
+}
+ 
+```
+
+Inequality 제약조건은 종목들 비중이 0보다 큰 조건이면 됩니다. Equality 제약조건은 종목 비중 합이 1이 되면 됩니다. 
+
+
+```{r message = FALSE, warning = FALSE}
+
+RiskParity = function(r){
+  
+  covmat = cov(r)
+  
+  RiskParity_Objective = function(x){
+    
+  variance = t(x) %*% covmat %*% x
+  sigma = sqrt(variance)
+  MRC = (covmat %*% x) / as.numeric(sigma)
+  
+  rc = x * MRC
+  rc_target = matrix(1/ncol(covmat) * sigma, nrow(covmat), 1)
+  sum_risk_diff = sum((rc - rc_target)^2)
+  
+  return(sum_risk_diff)
+  
+  }
+ 
+  inequal_objective = function(x){
+    return(x)
+  }
+
+  equal_objective = function(x){
+    return(sum(x)-1)
+  }
+
+  x0.equal = rep(1/ncol(covmat), ncol(covmat))
+
+  result = slsqp(x0 = x0.equal, fn = RiskParity_Objective, hin = inequal_objective, heq = equal_objective,
+                 control = list(xtol_rel = 1e-20, maxeval = 5000))
+
+  return(result)
+   
+}
+
+```
+
+잘 도는지 보겠습니다. 
+
+```{r message = FALSE, warning = FALSE}
+
+RiskParity(rets_All_Seasons_3)
+
+```
+
+이전에 cccp 패키지의 rp() 함수로 구한 것과 거의 같은 값이 나옵니다. 잘 작동하는 것으로 볼 수 있습니다. 이제 target volatility를 적용할 수 있도록 제약 조건을 바꾸겠습니다.
+
+```{r message = FALSE, warning = FALSE}
+
+RiskParity_TargetVol = function(r, target){
+  
+  covmat = cov(r)
+  
+  RiskParity_Objective = function(x){
+  
+  variance = t(x) %*% covmat %*% x
+  sigma = sqrt(variance)
+  MRC = (covmat %*% x) / as.numeric(sigma)
+  
+  rc = x * MRC
+  rc_target = matrix(1/ncol(covmat) * sigma, nrow(covmat), 1)
+  sum_risk_diff = sum((rc - rc_target)^2)
+  
+  return(sum_risk_diff)
+  
+  }
+  
+  TargetVol = function(x){
+    
+    variance = t(x) %*% covmat %*% x
+    sigma = sqrt(variance)
+    sigma_annualized = sigma * sqrt(12)
+    
+    constr = vector("numeric", length = 2)
+    
+    constr[1] = sigma_annualized - target * 0.95
+    constr[2] = target * 1.05 - sigma_annualized
+    
+    return(constr)
+    
+  }
+  
+  x0.equal = rep(1/ncol(covmat), ncol(covmat))
+  
+  result = nloptr(x0 = x0.equal, eval_f = RiskParity_Objective, eval_g_ineq = TargetVol,
+                  opts = list("algorithm" = "NLOPT_LN_COBYLA", "xtol_rel" = 1e-20, "maxeval" = 5000))
+  
+  return(result)
+   
+}
+
+```
+
+Target Volatility를 잡는데, 그 값에서 상하 5% 이하로 움직이도록 했습니다. 예를 들어 target이 10%면 9.5% ~ 10.5% 사이에 위치하게 과거 변동성 기반으로 최적화합니다. 이제 rolling 기준으로 작동하는지 보겠습니다. 매달 이전 12개월 동안의 변동성을 가지고 risk parity와 target volatility를 맞추어 비중을 구하는 것으로 하겠습니다. 비중 합이 1이 아닐 수 있으므로, 1 - 비중 총합을 같이 기록해 두고 현금 비중으로 사용할 것입니다. 
+
+```{r message = FALSE, warning = FALSE}
+
+weight_vec = vector('numeric', 6)
+
+i = 1
+
+while(i < nrow(rets_All_Seasons_3)-10){
+  
+  temp_vec = RiskParity_TargetVol(rets_All_Seasons_3[i:(i+11)], 0.1)$solution
+  temp_vec = c(temp_vec, 1-sum(temp_vec))
+  
+  weight_vec = rbind(weight_vec, temp_vec)
+  
+  i = i + 1
+  
+}
+
+# 다 넣은 후 맨 위에 생긴 zero row 제거
+weight_vec = weight_vec[2:565, 1:6]
+
+# xts 시계열로 변환
+weight_vec = xts(weight_vec, order.by = ReturnData$`Data Index`[889:1452])
+
+```
+
+비중 시계열은 다 만들었습니다. World Stock, US 30 YR, TIPS, Gold, Commodity (GSCI), T-Bill (현금 대용) 순서로 만들어져 있습니다. 현금 비중이 0보다 크다면 다른 자산군 비중 합이 1보다 작으니 시장에 대한 노출도가 100%가 안 되는 것이고, 현금 비중이 0보다 크면 그만큼의 차입을 통해 레버리지를 한 것입니다. 성과 평가를 하겠습니다. 
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# All seasons - TIPS & Risk Parity & Target Vol 
+rets_All_Seasons_6 = cbind(ReturnTimeSeries$`World Stocks`[889:1452], ReturnTimeSeries$`US 30 YR`[889:1452], 
+                           ReturnTimeSeries$`TIPS Series`[889:1452], ReturnTimeSeries$GOLD[889:1452], 
+                           ReturnTimeSeries$GSCI[889:1452], ReturnTimeSeries$`T-Bills`[889:1452]) %>% na.omit()
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+port_All_Seasons_6 = Return.portfolio(R = rets_All_Seasons_6, weights = weight_vec)
+All_Seasons_6 = cbind(rets_All_Seasons_6, port_All_Seasons_6) %>% setNames(c('World Stocks', 'US 30 YR', 'TIPS', 'GOLD',
+                                                                             'Commodities', 'T-Bill', 'All_Seasons'))
+
+charts.PerformanceSummary(All_Seasons_6, main = 'All Seasons with TIPS and Rolling Risk Parity - 10% target vol')
+
+Return.cumulative(port_All_Seasons_6)
+Return.annualized(port_All_Seasons_6)
+Return.cumulative(rets_All_Seasons_6)
+Return.annualized(rets_All_Seasons_6)
+
+StdDev.annualized(port_All_Seasons_6)
+StdDev.annualized(rets_All_Seasons_6)
+
+SharpeRatio.annualized(port_All_Seasons_6, Rf = ReturnTimeSeries$`T-Bills`[889:1452], geometric = TRUE)
+SharpeRatio.annualized(rets_All_Seasons_6, Rf = ReturnTimeSeries$`T-Bills`[889:1452], geometric = TRUE)
+
+maxDrawdown(port_All_Seasons_6)
+maxDrawdown(rets_All_Seasons_6)
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('All Seasons', 'World Stock', 'US 30 YR', 'TIPS', 'GOLD', 'Commodities'),
+    'v2' = c('118.7배', '93.9배', '52.5배', '24.4배', '16.6배', '5.7배'),
+    'v3' = c('10.72%', '10.15%', '8.79%', '7.04%', '6.15%', '3.77%'),
+    'v4' = c('12.96%', '14.99%', '12.81%', '6.08%', '19.22%', '20.48%'),
+    'v5' = c('0.454', '0.356', '0.316', '0.389', '0.078', '-0.037'),
+    'v6' = c('30.11%', '53.65%', '25.84%', '11.89%', '64.97%', '80.90%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 20: All Seasons_6 (with TIPS and Rolling Risk Parity - 10% target vol) 성과: 1974.01 ~ 2020.12'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r message = FALSE, warning = FALSE}
+
+table.Drawdowns(port_All_Seasons_6)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+# 연도별 수익률 그래프: All Seasons_6 전략 (TIPS and Rolling Risk Parity - 10% target vol)
+R.yr = apply.yearly(na.omit(All_Seasons_6$All_Seasons), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index[R.yr$Index %% 2 == 0],
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+Bridgewater Associates에서 risk parity fund의 target volatility 중 하나로 제시했던 10% target volatilty의 성과입니다. Target volatility와 Risk Parity를 동시에 맞추므로 레버리지를 사용하는 구간이 많습니다. 1974년 1월부터 누적 수익률 118.7배, 연 복리 수익률 10.71%, 연 변동성 12.96%, 샤프 비율 0.454, 최대 하락폭 30.11%입니다. 목표 변동성을 10%로 잡았으나 실제로는 12.96%가 나와 변동성이 예상보다 컸습니다. 그러나, 주식 시장을 이기면서 변동성은 더 낮은 괜찮은 전략입니다.
+
+# 4. 마켓 타이밍
+
+지금까지 본 전략들은 자산 배분 비중을 정한 채로 사서 버티거나, 과거 변동성에 따라 비율을 조정하는 전략이었습니다. 그 외에, 자산의 가격, 수익률, 기타 다른 지표로 시장 타이밍을 잡고 움직이는 방법도 있습니다. 이제 이런 방법을 보겠습니다.
+
+## 4.1 상대/절대/듀얼 모멘텀
+
+상대 모멘텀 전략은 여러 자산들 중 모멘텀이(추세가) 상대적으로 좋은 자산을 매수하고, 이후 리밸런싱에서 다시 모멘텀이 좋은 자산으로 바꾸어주는 전략입니다. 절대 모멘텀 전략은 자산 각각의 과거와 비교합니다. 예를 들어, 주식 시장 수익률이 현금 수익률보다 좋으면 주식 시장 ETF를 보유하고, 현금 수익률보다 나쁘면 현금을 보유합니다. 듀얼 모멘텀은 상대와 절대 모멘텀을 합친 방식으로, 여러 자산의 모멘텀을 비교하여 모멘텀이 높은 것들을 선택하고(상대), 선택된 각 자산의 수익률이 현금 수익률보다 못하면 현금을 보유하도록 하는(절대) 전략입니다. 모멘텀과 관련하여 두 가지 전략을 보겠습니다. 
+
+첫 번째 전략은 섹터 로테이션 전략입니다. 섹터 ETF들로 테스트합니다. 섹터별 목록은 다음과 같습니다. 
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('XLC', 'XLY', 'XLP', 'XLE', 'XLF', 'XLV', 'XLI', 'XLB', 'XLRE', 'XLK', 'XLU'),
+    'v2' = c('Communication Services','Consumer Discretionary','Consumer Staples','Energy','Financials','Healthcare','Industrials','Materials','Real Estate','Technology','Utilities')
+  ),
+  
+  col.names = c('TICKER', 'SECTOR'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 21: 섹터 ETF'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+총 11개가 있는데, 이 중 나온지 얼마 되지 않은 XLC (2018-06-18), XLRE (2015-10-07) 두 가지를 제외하고 9개에 대해서 테스트합니다. 9개 섹터 중 최근 12개월 누적 수익률 상위 5개 섹터를 선택 후 12개월 누적 수익률이 양수인 섹터만 선택합니다. 선택된 섹터에 20%씩 비중을 부여하고, 남는 비중은 단기 국채로 가져갑니다.
+
+```{r message = FALSE, warning = FALSE}
+
+symbols = c("XLY", "XLP", "XLE", "XLF", "XLV", "XLI", "XLB", "XLK", "XLU", "SHY")
+symbols_bm = c("SPY")
+
+# 가격 데이터 다운로드
+getSymbols(c(symbols, symbols_bm), src = 'yahoo', from = '1998-12-31', to = '2021-01-29')
+
+prices = list()
+for(i in 1:length(symbols)){
+  prices[[i]] = Ad(get(symbols[[i]]))
+}
+prices = do.call(cbind, prices)
+
+bm = Ad(get(symbols_bm))
+
+rets = na.omit(Return.calculate(prices[, -ncol(prices)]))
+ret_cash = na.omit(Return.calculate(prices[, ncol(prices)]))
+ret_bm = na.omit(Return.calculate(bm))
+
+num = 5
+lookback = 12
+
+wts = list()
+ep = endpoints(rets, on = "months")
+
+for(i in (lookback+1):length(ep)){
+  
+  # 12개월 누적 수익률
+  sub_cum = Return.cumulative(rets[c(ep[i-12] : ep[i]), ])
+  
+  # 가져가는 자산 개수: 상위 5위까지 & 누적 수익률 0 이상
+  K = which(rank(- sub_cum) <= num & sub_cum >= 0)
+  
+  # 매달 비중 결정
+  wt = rep(0, ncol(rets))
+  wt[K] = 1/num
+  names(wt) = colnames(rets)
+  wt = xts(t(wt), order.by = index(rets[ep[i]]))
+  wts[[i]] = wt
+}
+
+# 비중 모음
+wts = round(do.call(rbind, wts), 3)
+wts$zeros = 1 - rowSums(wts)
+rets$zeros = ret_cash
+
+Sector_Rot = Return.portfolio(R = rets, weigths = wts, verbose = TRUE)
+Sector_Rot_ret = Sector_Rot$return
+
+comparison = na.omit(cbind(Sector_Rot_ret, ret_bm))
+charts.PerformanceSummary(comparison, main = "")
+chart.StackedBar(wts)
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(Sector_Rot_ret)
+Return.cumulative(ret_bm)
+Return.annualized(Sector_Rot_ret)
+Return.annualized(ret_bm)
+StdDev.annualized(Sector_Rot_ret)
+StdDev.annualized(ret_bm)
+SharpeRatio.annualized(Sector_Rot_ret, ret_cash, geometric = TRUE)
+SharpeRatio.annualized(ret_bm, ret_cash, geometric = TRUE)
+maxDrawdown(Sector_Rot_ret)
+maxDrawdown(ret_bm)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+R.yr = apply.yearly(na.omit(comparison), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index,
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Sector Rotation', 'Benchmark(SPY)'),
+    'v2' = c('4.55배', '4.59배'),
+    'v3' = c('7.11%', '7.16%'),
+    'v4' = c('17.45%', '19.80%'),
+    'v5' = c('0.392', '0.393'),
+    'v6' = c('48.68%', '55.19%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 22: 섹터 로테이션 전략 성과'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+상대 모멘텀과 절대 모멘텀을 활용한 섹터 로테이션 전략의 테스트 결과입니다. 수익률은 시장과 비슷하고 변동성은 약간 낮습니다. 금융위기 때 현금 100%로 대피하는 것을 볼 수 있습니다. 이제 주식 섹터 말고 다른 자산군들을 가지고 비슷한 전략을 구현해 보겠습니다. 
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('VIVAX','VIGRX','VISVX','VISGX','VTMGX','VEIEX','PGBIX','VFITX','LQD','TLT','IAU','GSG','VGSIX'),
+    'v2' = c('Large Cap Value','Large Cap Growth','Small Cap Value','Small cap Growth','Developed Market Stock','Emerging Market Stock','Global Bond','US Intermediate Term Treasury','Corporate Bond','Long Term Treasury','Gold','Commodities','Real Estate')
+  ),
+  
+  col.names = c('TICKER', 'Category'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 23: 글로벌 자산군'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+symbols = c("VIVAX", "VIGRX", "VISVX", "VISGX", "VTMGX", "VEIEX", "VFITX", "PGBIX", "LQD", "TLT", "IAU", "GSG", "VGSIX", "SHY")
+symbols_bm = c("SPY")
+
+# 가격 데이터 다운로드
+getSymbols(c(symbols, symbols_bm), src = 'yahoo', from = '2006-07-10', to = '2021-01-29')
+
+prices = list()
+for(i in 1:length(symbols)){
+  prices[[i]] = Ad(get(symbols[[i]]))
+}
+prices = do.call(cbind, prices)
+
+bm = Ad(get(symbols_bm))
+
+rets = na.omit(Return.calculate(prices[, -ncol(prices)]))
+ret_cash = na.omit(Return.calculate(prices[, ncol(prices)]))
+ret_bm = na.omit(Return.calculate(bm))
+
+num = 5
+lookback = 12
+
+wts = list()
+ep = endpoints(rets, on = "months")
+
+for(i in (lookback+1):length(ep)){
+  
+  # 12개월 누적 수익률
+  sub_cum = Return.cumulative(rets[c(ep[i-12] : ep[i]), ])
+  
+  # 가져가는 자산 개수: 상위 5위까지 & 누적 수익률 0 이상
+  K = which(rank(- sub_cum) <= num & sub_cum >= 0)
+  
+  # 매달 비중 결정
+  wt = rep(0, ncol(rets))
+  wt[K] = 1/num
+  names(wt) = colnames(rets)
+  wt = xts(t(wt), order.by = index(rets[ep[i]]))
+  wts[[i]] = wt
+}
+
+# 비중 모음
+wts = round(do.call(rbind, wts), 3)
+wts$zeros = 1 - rowSums(wts)
+rets$zeros = ret_cash
+
+Asset_Rot = Return.portfolio(R = rets, weigths = wts, verbose = TRUE)
+Asset_Rot_ret = Asset_Rot$return
+
+comparison = na.omit(cbind(Asset_Rot_ret, ret_bm))
+charts.PerformanceSummary(comparison, main = "")
+chart.StackedBar(wts)
+
+```
+
+```{r message = FALSE, warning = FALSE, results = FALSE}
+
+Return.cumulative(Asset_Rot_ret)
+Return.cumulative(ret_bm)
+Return.annualized(Asset_Rot_ret)
+Return.annualized(ret_bm)
+StdDev.annualized(Asset_Rot_ret)
+StdDev.annualized(ret_bm)
+SharpeRatio.annualized(Asset_Rot_ret, ret_cash, geometric = TRUE)
+SharpeRatio.annualized(ret_bm, ret_cash, geometric = TRUE)
+maxDrawdown(Asset_Rot_ret)
+maxDrawdown(ret_bm)
+
+```
+
+```{r message = FALSE, warning = FALSE, echo = FALSE}
+
+R.yr = apply.yearly(na.omit(comparison), Return.cumulative) %>%
+  fortify.zoo() %>% 
+  mutate(Index = year(Index)) %>% 
+  gather(key, value, -Index) %>%
+  mutate(key = factor(key, levels = unique(key)))
+
+ggplot(R.yr, aes(x = Index, y = value, fill = key)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Annual Return") +
+  xlab(NULL) +
+  ylab(NULL) +
+  theme_bw() +
+  scale_y_continuous(expand = c(0.03, 0.03)) +
+  scale_x_continuous(breaks = R.yr$Index,
+                     expand = c(0.01, 0.01)) +
+  theme(plot.title = element_text(hjust = 0.5, size = 12),
+        legend.position = 'bottom',
+        legend.title = element_blank(),
+        legend.text = element_text(size=9),
+        axis.text.x = element_text(angle = 90, hjust = 1, size= 8),
+        panel.grid.minor.x = element_blank() ) +
+  guides(fill = guide_legend(byrow = TRUE))
+
+```
+
+```{r echo = FALSE, warning = FALSE}
+
+knitr::kable(
+  data.frame(
+    'v1' = c('Asset Rotation', 'Benchmark(SPY)'),
+    'v2' = c('2.65배', '3.99배'),
+    'v3' = c('6.94%', '9.99%'),
+    'v4' = c('11.03%', '20.31%'),
+    'v5' = c('0.423', '0.373'),
+    'v6' = c('33.74%', '55.19%')
+  ),
+  
+  col.names = c('전략', '누적 수익', '연복리 수익률', '표준편차', '샤프 비율', '최대 하락폭'),
+  booktabs = TRUE,
+  escape = FALSE,
+  align = "c",
+  caption = '표 24: 자산군 로테이션 전략 성과'
+) %>%
+  kableExtra::kable_styling(latex_options = c("striped", "hold_position"))
+
+```
+
+자산군 로테이션 전략입니다. 수익률 자체는 비교 대상인 주식 시장보다 못하나, 샤프 비율이 시장보다 높습니다. 그러나, 섹터 로테이션 전략과 자산군 로테이션 전략 모두 잦은 거래에 따른 거래 비용을 고려하게 되면 수익률이 더 악화될 것입니다. 모멘텀 전략이 잘 먹히는 구간에서는 괜찮은 전략이지만, 모멘텀 전략이 작동하지 않으면 거래 비용만 내고 별다른 이득은 얻을 수 없습니다. 
