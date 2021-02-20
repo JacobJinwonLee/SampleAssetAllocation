@@ -1,4 +1,4 @@
-# AssetAllocation
+# SampleAssetAllocation
 
 ### These are backtesting codes for asset allocation strategies. Each html file in a folder has reports for each strategy.
 
