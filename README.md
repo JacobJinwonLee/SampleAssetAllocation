@@ -1,11 +1,16 @@
 # SampleAssetAllocation
 
-### These are backtesting codes for asset allocation strategies. Each html file in a folder has reports for each strategy.
+These are backtesting codes for asset allocation strategies. Each html file in a folder has reports for each strategy.
 
-### List of Asset Allocation Strategy
+## List of Asset Allocation Strategy (Static)
 
-#### - R (A backtest with R, rmd file code and html file report)
-#### - 60/40
-#### - Harry Browne's Permanent Portfolio
-#### - Tyler's Golden Butterfly
-#### - Ray Dalio's All Seasons
+- R (A backtest with R, rmd file code and html file report)
+- 60/40
+- Harry Browne's Permanent Portfolio
+- Tyler's Golden Butterfly
+- Ray Dalio's All Seasons
+
+## List of Asset Allocation Strategy (Tactical)
+
+- DAA (Defensive Asset Allocation)
+- Modified DAA (modify asset group to be invested)
