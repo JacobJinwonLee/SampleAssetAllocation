@@ -12,6 +12,7 @@ These are backtesting codes for asset allocation strategies. Each html file in a
 - Harry Browne's Permanent Portfolio
 - Tyler's Golden Butterfly
 - Ray Dalio's All Seasons
+- Yale (David Swensen) Portfolio
 
 ## List of Asset Allocation Strategy (Tactical)
 
