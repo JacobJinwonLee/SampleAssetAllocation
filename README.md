@@ -15,10 +15,14 @@ These are backtesting codes for asset allocation strategies.
 - Ray Dalio's All Seasons
 - Yale (David Swensen) Portfolio
 - Endowment Index by ETF
-- BuyWrite
-- NTSX (Leveraged 60:40 ETF)
 
 ## List of Asset Allocation Strategy (Tactical)
 
 - DAA (Defensive Asset Allocation)
 - Modified DAA (modify asset group to be invested)
+
+## Special (with leverage, option, futures, ...)
+
+- BuyWrite (Covered Call - QYLD ETF)
+- NTSX (Leveraged 60:40 ETF)
+- SWAN (Black Swan ETF)
