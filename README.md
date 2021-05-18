@@ -28,3 +28,4 @@ These are backtesting codes for asset allocation strategies.
 - SWAN (Black Swan ETF)
 - PHDG (Invesco S&P 500 Downside Hedged ETF)
 - DRSK (Aptus Defined Risk ETF)
+- TAIL (Cambria Tail Risk ETF)
