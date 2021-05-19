@@ -30,3 +30,4 @@ These are backtesting codes for asset allocation strategies.
 - DRSK (Aptus Defined Risk ETF)
 - TAIL (Cambria Tail Risk ETF)
 - IVOL (Quadratic Interest Rate Volatility and Inflation Hedge ETF)
+- HNDL (NASDAQ 7HANDL Index ETF)
