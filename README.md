@@ -15,6 +15,7 @@ These are backtesting codes for asset allocation strategies.
 - Ray Dalio's All Seasons
 - Yale (David Swensen) Portfolio
 - Endowment Index by ETF
+- New All Seasons (all seasons without nominal bond)
 
 ## List of Asset Allocation Strategy (Tactical)
 
