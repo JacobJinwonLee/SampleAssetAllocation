@@ -22,7 +22,7 @@ These are backtesting codes for asset allocation strategies.
 - DAA (Defensive Asset Allocation)
 - Modified DAA (modify asset group to be invested)
 
-## Special (with leverage, option, futures, ...)
+## Special (with leverage, option, futures, ...) ETFs
 
 - BuyWrite (Covered Call - QYLD ETF)
 - NTSX (Leveraged 60:40 ETF)
