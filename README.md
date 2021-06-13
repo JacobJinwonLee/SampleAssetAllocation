@@ -19,8 +19,8 @@ These are backtesting codes for asset allocation strategies.
 
 ## List of Asset Allocation Strategy (Tactical)
 
+- Sector Rotation (with Dual Momentum)
 - DAA (Defensive Asset Allocation)
-- Modified DAA (modify asset group to be invested)
 
 ## Special (with leverage, option, futures, ...) ETFs
 
