@@ -23,6 +23,7 @@ These are backtesting codes for asset allocation strategies.
 - Sector Rotation (with Dual Momentum)
 - DAA (Defensive Asset Allocation)
 - VAA (Vigilant Asset Allocation)
+- Bond Momentum (High Yield, Convertible Bond, Inter-term Treasury Momentum)
 
 ## Special (with leverage, option, futures, ...) ETFs
 
